@@ -1,0 +1,34 @@
+{
+  "name": "gerenciador_loja_frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "axios": "^1.13.2",
+    "lucide-vue-next": "^0.561.0",
+    "vue": "^3.5.24",
+    "vue-router": "^4.6.4",
+    "vue-sonner": "^2.0.9",
+    "vue-toastification": "^2.0.0-rc.5",
+    "vuetify": "^3.11.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@types/vue-router": "^2.0.0",
+    "@vitejs/plugin-vue": "^6.0.1",
+    "@vue/tsconfig": "^0.8.1",
+    "autoprefixer": "^10.4.22",
+    "postcss": "^8.5.6",
+    "sass": "^1.96.0",
+    "sass-loader": "^16.0.6",
+    "tailwindcss": "^3.4.19",
+    "typescript": "~5.9.3",
+    "vite": "^7.2.4",
+    "vue-tsc": "^3.1.4"
+  }
+}

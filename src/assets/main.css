@@ -1,0 +1,12 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.VOverlay,
+.v-overlay {
+  z-index: 9000;
+}
+
+.toast-container {
+  z-index: 99999 !important;
+}
