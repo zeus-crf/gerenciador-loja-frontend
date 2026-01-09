@@ -203,6 +203,8 @@ const deletarPedido = async (id: string) => {
     toast.error(`Erro ao deletar pedido: ${err.response?.status || err.message}`)
   }
 }
+
+
 </script>
 
 <template>

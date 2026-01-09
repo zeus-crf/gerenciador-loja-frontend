@@ -3,6 +3,8 @@ import { ref, computed, watch } from 'vue'
 import axios from 'axios'
 import { X } from 'lucide-vue-next'
 
+const API_URL = import.meta.env.VITE_API_URL
+
 /* =======================
    TIPOS
 ======================= */
@@ -46,11 +48,13 @@ const close = () => (show.value = false)
 ======================= */
 const pedidos = ref<Pedido[]>([])
 const loadingPedidos = ref(false)
+const fetchError = ref('')
 
 /* =======================
    COMPUTED
 ======================= */
 const pedidosRecentes = computed(() => pedidos.value.slice(0, 3))
+
 const totalGasto = computed(() =>
   pedidos.value.reduce((sum, p) => sum + p.valorTotal, 0)
 )
@@ -75,47 +79,64 @@ const formatDate = (dateStr: string | undefined | null) => {
 }
 
 const formatMoney = (v: number) =>
-  v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+  v.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  })
 
 /* =======================
-   WATCHER
+   WATCHER PARA CLIENTE
 ======================= */
 watch(
   () => props.cliente,
   async (cliente) => {
     if (!cliente) {
       pedidos.value = []
+      fetchError.value = ''
       return
     }
 
-    // Trata createdAt
-    if (!cliente.createdAt) {
-      cliente.createdAt = '-'
-    } else {
-      const parsedDate = new Date(cliente.createdAt)
-      cliente.createdAt = isNaN(parsedDate.getTime()) ? '-' : parsedDate.toISOString()
-    }
-
-    // Carrega pedidos do cliente
+    // Reset
+    pedidos.value = []
+    fetchError.value = ''
     loadingPedidos.value = true
+
     try {
       const token = localStorage.getItem('token')
+      if (!token) throw new Error('Token não encontrado')
+
       const { data } = await axios.get(
-        `http://localhost:8080/pedidos/cliente/${cliente.id}`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        `${API_URL}/pedidos/cliente/${cliente.id}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        }
       )
 
-      pedidos.value = (data || []).map((p: any) => ({
+      // 🔹 Garante sempre um array
+      const listaPedidos = Array.isArray(data)
+        ? data
+        : Array.isArray(data?.content)
+          ? data.content
+          : Array.isArray(data?.pedidos)
+            ? data.pedidos
+            : []
+
+      pedidos.value = listaPedidos.map((p: any) => ({
         id: p.id,
         data_criacao: p.dataCriacao ? new Date(p.dataCriacao).toISOString() : '',
-        valorTotal: p.valorTotal ?? p.valor_total ?? 0,
-        statusDePagamento: ['PAGO'].includes(p.statusDePagamento) ? 'PAGO' : 'PENDENTE'
+        valorTotal: Number(p.valorTotal ?? p.valor_total ?? 0),
+        statusDePagamento: p.statusDePagamento === 'PAGO' ? 'PAGO' : 'PENDENTE'
       })).sort(
-        (a, b) => new Date(b.data_criacao).getTime() - new Date(a.data_criacao).getTime()
+        (a, b) =>
+          new Date(b.data_criacao).getTime() - new Date(a.data_criacao).getTime()
       )
-    } catch (err) {
-      pedidos.value = []
+    } catch (err: any) {
       console.error('Erro ao buscar pedidos:', err)
+      fetchError.value = err.response?.status === 401
+        ? 'Você não tem autorização para visualizar os pedidos deste cliente.'
+        : 'Erro ao carregar pedidos.'
     } finally {
       loadingPedidos.value = false
     }
@@ -159,8 +180,6 @@ watch(
               <p class="text-sm text-slate-800">{{ props.cliente?.endereco || '—' }}</p>
             </div>
 
-
-
             <div class="grid grid-cols-[auto_1fr] gap-x-4 border-t border-slate-200 py-4">
               <p class="text-sm text-slate-500">Cliente desde</p>
               <p class="text-sm font-medium text-slate-800">{{ formatDate(props.cliente?.createdAt) }}</p>
@@ -182,17 +201,21 @@ watch(
         <div class="flex flex-col">
           <h3 class="text-lg font-bold text-slate-900">Compras Recentes</h3>
           <div class="mt-4 flex flex-col gap-2">
-            <div v-for="pedido in pedidosRecentes" :key="pedido.id" class="flex items-center gap-4 rounded-lg bg-slate-50 p-3">
-              <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/20 text-primary">🛍️</div>
-              <div class="flex-1">
-                <p class="text-sm font-medium text-slate-800">Pedido #{{ pedido.id }}</p>
-                <p class="text-xs text-slate-500">{{ formatDate(pedido.data_criacao) }} — {{ formatMoney(pedido.valorTotal) }}</p>
+            <div v-if="loadingPedidos" class="text-sm text-slate-500">Carregando pedidos...</div>
+            <div v-else-if="fetchError" class="text-sm text-red-500">{{ fetchError }}</div>
+            <div v-else>
+              <div v-for="pedido in pedidosRecentes" :key="pedido.id" class="flex items-center gap-4 rounded-lg bg-slate-50 p-3">
+                <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/20 text-primary">🛍️</div>
+                <div class="flex-1">
+                  <p class="text-sm font-medium text-slate-800">Pedido #{{ pedido.id }}</p>
+                  <p class="text-xs text-slate-500">{{ formatDate(pedido.data_criacao) }} — {{ formatMoney(pedido.valorTotal) }}</p>
+                </div>
+                <div :class="pedido.statusDePagamento === 'PAGO' ? 'bg-emerald-100 text-emerald-700' : 'bg-yellow-100 text-yellow-700'" class="rounded-full px-2.5 py-0.5 text-xs font-medium">
+                  {{ pedido.statusDePagamento === 'PAGO' ? 'Pago' : 'Pendente' }}
+                </div>
               </div>
-              <div :class="pedido.statusDePagamento === 'PAGO' ? 'bg-emerald-100 text-emerald-700' : 'bg-yellow-100 text-yellow-700'" class="rounded-full px-2.5 py-0.5 text-xs font-medium">
-                {{ pedido.statusDePagamento === 'PAGO' ? 'Pago' : 'Pendente' }}
-              </div>
+              <p v-if="!loadingPedidos && pedidosRecentes.length === 0" class="text-sm text-slate-500">Nenhuma compra encontrada</p>
             </div>
-            <p v-if="!loadingPedidos && pedidosRecentes.length === 0" class="text-sm text-slate-500">Nenhuma compra encontrada</p>
           </div>
         </div>
       </div>
