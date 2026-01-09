@@ -1,19 +1,72 @@
 <script setup lang="ts">
+import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import axios from 'axios'
 import {
   LayoutDashboard,
-  Users,
+  Briefcase,
   ReceiptText,
-  Briefcase ,
-  Plus
+  Users,
+  LogOut
 } from 'lucide-vue-next'
+
+const router = useRouter()
+
+// =======================
+// USUÁRIO LOGADO
+// =======================
+const nomeUsuario = ref('')
+
+onMounted(() => {
+  const usuarioSalvo = localStorage.getItem('usuario')
+
+  if (usuarioSalvo) {
+    try {
+      const usuario = JSON.parse(usuarioSalvo)
+      nomeUsuario.value = usuario.nome || 'Usuário'
+    } catch {
+      nomeUsuario.value = 'Usuário'
+    }
+  }
+})
+
+// =======================
+// LOGOUT
+// =======================
+async function logout() {
+  try {
+    const token = localStorage.getItem('token')
+
+    if (token) {
+      await axios.post(
+        'http://localhost:8080/auth/logout',
+        {},
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
+    }
+  } catch (error) {
+    console.warn('Erro ao deslogar no backend:', error)
+  } finally {
+    localStorage.removeItem('token')
+    localStorage.removeItem('usuario')
+    router.push('/login')
+  }
+}
 </script>
+
 
 <template>
   <aside
-    class="flex w-64 h-screen flex-col
-           bg-white p-4
-           border-r border-gray-200"
-  >
+  class="fixed top-0 left-0 z-40
+         w-64 h-screen
+         flex flex-col
+         bg-white p-4
+         border-r border-gray-200"
+>
     <!-- TOPO (Logo + Menu) -->
     <div class="flex flex-col gap-4 flex-grow">
       <!-- Logo -->
@@ -26,7 +79,7 @@ import {
           <h1 class="text-gray-900 text-base font-medium">
             Loja de Roupas
           </h1>
-          <p class="text-sm text-gray-500">Admin</p>
+          <p class="text-sm text-gray-500">{{ nomeUsuario }}</p>
         </div>
       </div>
 
@@ -39,6 +92,15 @@ import {
           <LayoutDashboard class="w-5 h-5" />
           <span class="text-sm font-medium">Dashboard</span>
         </RouterLink> -->
+
+        <RouterLink
+        :to="{ name: 'dashboard' }"
+        class="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-700 hover:bg-primary/10"
+        active-class="bg-primary/10 text-primary"
+      >
+        <LayoutDashboard  class="w-5 h-5" />
+        <span class="text-sm font-medium">Dashboard</span>
+      </RouterLink>
 
         <RouterLink
         :to="{ name: 'clientes' }"
@@ -81,13 +143,18 @@ import {
 
     <!-- BOTÃO FIXO NO FUNDO -->
     <button
-      class="flex items-center justify-center gap-2
-             h-10 rounded-lg
-             bg-primary text-white
-             text-sm font-bold mt-4"
-    >
-      <Plus class="w-4 h-4" />
-      Novo Pedido
-    </button>
+  @click="logout"
+  class="flex items-center justify-center gap-2
+         h-10 rounded-lg
+         bg-red-500 hover:bg-red-600
+         text-white
+         text-sm font-bold
+         mt-4
+         transition-colors"
+>
+  <LogOut class="w-4 h-4" />
+  Sair da conta
+</button>
+
   </aside>
 </template>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, watchEffect, onMounted } from 'vue'
 import axios from 'axios'
 import { Plus, Trash2, X } from 'lucide-vue-next'
 import ModalNewItem from './ModalNewItem.vue'
@@ -91,21 +91,25 @@ const removerClienteSelecionado = () => {
 }
 
 /* =======================
-   WATCH MODAL
+   WATCH / WATCHEFFECT
 ======================= */
-watch(internalShow, (isOpen) => {
-  if (!isOpen) return
-  if (props.pedido) {
-    // Popula formData para edição
+watchEffect(() => {
+  if (!internalShow.value) return
+  if (!props.pedido) {
+    resetForm()
+    return
+  }
+
+  // Só preenche na primeira vez que abre
+  if (formData.value.idCliente === '') {
     formData.value.idCliente = props.pedido.cliente.id
     formData.value.parcelasTotais = props.pedido.parcelasTotais || 1
-    formData.value.parcelasRestantes = props.pedido.parcelasRestantes ?? 0
-    formData.value.parcelasPagas = props.pedido.parcelasPagas !== undefined
-      ? props.pedido.parcelasPagas
-      : formData.value.parcelasTotais - formData.value.parcelasRestantes
+    formData.value.parcelasPagas = props.pedido.parcelasPagas ?? 0
+    formData.value.parcelasRestantes =
+      formData.value.parcelasTotais - formData.value.parcelasPagas
+
     clienteSearch.value = props.pedido.cliente.nome
 
-    // Carrega itens
     formData.value.itens = props.pedido.itens.map(i => ({
       id: i.id,
       nome: i.nomeProduto,
@@ -117,9 +121,15 @@ watch(internalShow, (isOpen) => {
     if (formData.value.parcelasRestantes === 0) paymentStatusFront.value = 'paid'
     else if (formData.value.parcelasTotais > 1) paymentStatusFront.value = 'installment'
     else paymentStatusFront.value = 'pending'
-  } else {
-    resetForm()
   }
+})
+
+
+watch([() => formData.value.parcelasTotais, () => formData.value.parcelasPagas], () => {
+  formData.value.parcelasRestantes = Math.max(
+    formData.value.parcelasTotais - formData.value.parcelasPagas,
+    0
+  )
 })
 
 /* =======================
@@ -130,8 +140,11 @@ const clientes = ref<Cliente[]>([])
 onMounted(async () => {
   try {
     const token = localStorage.getItem('token')
-    const res = await axios.get('http://localhost:8080/clientes', { headers: { Authorization: `Bearer ${token}` } })
+    const res = await axios.get('http://localhost:8080/clientes', {
+      headers: { Authorization: `Bearer ${token}` }
+    })
     clientes.value = res.data._embedded?.clienteList || []
+    console.log('[Clientes] carregados:', clientes.value)
   } catch {
     emit('toast', { message: 'Erro ao carregar clientes', type: 'error' })
   }
@@ -169,11 +182,6 @@ const removeItem = (index: number) => formData.value.itens.splice(index, 1)
 ======================= */
 const total = computed(() => formData.value.itens.reduce((acc, i) => acc + i.preco * i.quantidade, 0))
 const valorParcela = computed(() => total.value / Math.max(formData.value.parcelasTotais, 1))
-
-watch([() => formData.value.parcelasTotais, () => formData.value.parcelasPagas], () => {
-  formData.value.parcelasRestantes = Math.max(formData.value.parcelasTotais - formData.value.parcelasPagas, 0)
-})
-
 const formatCurrency = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
 /* =======================
@@ -182,14 +190,11 @@ const formatCurrency = (v: number) => v.toLocaleString('pt-BR', { style: 'curren
 const salvarPedido = async () => {
   try {
     const token = localStorage.getItem('token')
-    console.log('Token usado:', token)
-
     if (!token) throw new Error('Sessão expirada. Faça login novamente.')
 
     const payload = {
       idCliente: formData.value.idCliente,
       parcelasTotais: formData.value.parcelasTotais,
-      parcelasRestantes: formData.value.parcelasRestantes,
       parcelasPagas: formData.value.parcelasPagas,
       itens: formData.value.itens.map(i => ({
         id: i.id,
@@ -197,72 +202,35 @@ const salvarPedido = async () => {
         preco: i.preco,
         quantidade: i.quantidade,
         tamanho: i.tamanho
-      }))
+      })),
+        statusDePagamento: paymentStatusFront.value
     }
 
-    console.log('Payload enviado:', payload)
+    console.log('[Salvar] Payload enviado: ', payload)
 
     let pedidoAtualizado
 
     if (isEditMode.value && props.pedido) {
-      console.log('Modo edição. Enviando PUT para:', `http://localhost:8080/pedidos/${props.pedido.id}`)
-      
+      console.log('[Salvar] Modo edição, PUT em: ', `http://localhost:8080/pedidos/${props.pedido.id}`)
       const res = await axios.put(
         `http://localhost:8080/pedidos/${props.pedido.id}`,
         payload,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
+        { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
       )
-
-      console.log('Resposta do backend:', res.data)
-
-      const statusDePagamento = paymentStatusFront.value === 'paid'
-      ? 'PAGO'
-      : paymentStatusFront.value === 'pending'
-        ? 'PENDENTE'
-        : payload.parcelasRestantes === 0
-          ? 'PAGO'
-          : 'PENDENTE'
-
-
-      pedidoAtualizado = {
-        ...props.pedido,
-        ...payload,
-        statusDePagamento,
-        parcelasPagas: payload.parcelasPagas,
-        itens: payload.itens.map(i => ({
-          id: i.id,
-          nomeProduto: i.nome,
-          precoUnitario: i.preco,
-          quantidade: i.quantidade,
-          tamanho: i.tamanho
-        }))
-      }
-
+      pedidoAtualizado = res.data
+      console.log('[Salvar] Resposta PUT: ', pedidoAtualizado)
     } else {
-      console.log('Modo criação. Enviando POST')
       const res = await axios.post(
         'http://localhost:8080/pedidos',
         payload,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
+        { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
       )
       pedidoAtualizado = res.data
     }
 
-    console.log('Pedido atualizado:', pedidoAtualizado)
     emit('toast', { message: 'Pedido salvo com sucesso!', type: 'success' })
     emit('submit', pedidoAtualizado)
     close()
-
   } catch (err: any) {
     console.error('Erro ao salvar pedido:', err)
     const msg = err.response?.data?.message || err.message || 'Erro ao salvar'
@@ -270,20 +238,18 @@ const salvarPedido = async () => {
   }
 }
 
-
 const canSubmit = computed(() => !!formData.value.idCliente && formData.value.itens.length > 0)
 </script>
 
 <template>
   <div v-if="internalShow" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
     <div class="w-full max-w-4xl rounded-xl bg-background-light shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+      
       <!-- HEADER -->
       <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
         <div class="flex flex-col leading-tight">
           <p class="text-lg font-bold text-slate-900">{{ isEditMode ? 'Editar Pedido' : 'Novo Pedido' }}</p>
-          <p class="text-sm text-slate-500">
-            {{ isEditMode ? 'Altere os dados do pedido.' : 'Preencha os dados abaixo.' }}
-          </p>
+          <p class="text-sm text-slate-500">{{ isEditMode ? 'Altere os dados do pedido.' : 'Preencha os dados abaixo.' }}</p>
         </div>
         <button @click="close" class="h-10 w-10 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600">
           <X />
@@ -406,11 +372,8 @@ const canSubmit = computed(() => !!formData.value.idCliente && formData.value.it
         </button>
       </div>
     </div>
-  </div>
 
-  <!-- Modal de Item -->
-  <ModalNewItem
-    v-model="showItemModal"
-    @add="addItemFromModal"
-  />
+    <!-- Modal de Item -->
+    <ModalNewItem v-model="showItemModal" @add="addItemFromModal" />
+  </div>
 </template>

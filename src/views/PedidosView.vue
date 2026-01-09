@@ -139,14 +139,12 @@ const pedidosFiltrados = computed(() => {
   if (filterDataFinal.value) {
     const end = endOfDay(filterDataFinal.value)
     resultado = resultado.filter(p => p.dataCriacao && new Date(p.dataCriacao) <= end)
-
   }
 
   resultado.sort((a, b) => {
     const da = a.dataCriacao ? new Date(a.dataCriacao).getTime() : 0
     const db = b.dataCriacao ? new Date(b.dataCriacao).getTime() : 0
     return orderFilter.value === 'RECENTE' ? db - da : da - db
-    
   })
 
   return resultado
@@ -162,7 +160,7 @@ const aplicarFiltros = (filters: Filters) => {
   filterDataInicial.value = filters.dataInicial
   filterDataFinal.value = filters.dataFinal
   orderFilter.value = filters.ordem
-  toast.success('Filtro Aplicado!')
+  toast.success('Filtro aplicado!')
 }
 
 const limparFiltros = () => {
@@ -170,7 +168,7 @@ const limparFiltros = () => {
   filterDataInicial.value = null
   filterDataFinal.value = null
   orderFilter.value = 'RECENTE'
-  toast.success('Filtro Limpo!')
+  toast.success('Filtros limpos!')
 }
 
 // ======================
@@ -205,13 +203,12 @@ const deletarPedido = async (id: string) => {
     toast.error(`Erro ao deletar pedido: ${err.response?.status || err.message}`)
   }
 }
-
 </script>
 
 <template>
   <div class="flex h-screen">
     <Sidebar />
-    <main class="flex-1 p-8 overflow-y-auto">
+    <main class="flex-1 ml-64 px-4 py-8 md:px-8">
       <div class="mx-auto max-w-7xl flex flex-col gap-6">
 
         <!-- Cabeçalho -->
@@ -235,13 +232,12 @@ const deletarPedido = async (id: string) => {
 
         <!-- Tabela de pedidos -->
         <TablePedidos
-        :pedidos="pedidosFiltrados"
-        :loading="loading"
-        @edit="pedidoSelecionado = $event; showEditModal = true"
-        @view="pedidoVisualizado = $event; showViewPedidoModal = true"
-        @delete="pedidoDeletar = $event; showDeleteModal = true"
-      />
-
+          :pedidos="pedidosFiltrados"
+          :loading="loading"
+          @edit="pedidoSelecionado = $event; showEditModal = true"
+          @view="pedidoVisualizado = $event; showViewPedidoModal = true"
+          @delete="pedidoDeletar = $event; showDeleteModal = true"
+        />
 
         <!-- Modais -->
         <ModalFilters

@@ -197,10 +197,10 @@ const abrirFiltroClientes = () => (showFiltersClientes.value = true)
 </script>
 
 <template>
-  <div class="flex min-h-screen bg-background-light">
+  <div class="flex min-h-screen">
     <Sidebar />
 
-    <main class="flex-1 px-4 py-8 md:px-8">
+    <main class="flex-1 ml-64 px-4 py-8 md:px-8">
       <div class="mx-auto max-w-7xl flex flex-col gap-6">
 
         <!-- HEADER -->

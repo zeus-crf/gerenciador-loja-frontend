@@ -15,7 +15,8 @@ export default {
                 "surface-light": "#ffffff", 
                 "surface-dark": "#162e26", 
                 "text-main": "#171717ff", 
-                "text-muted": "#202120ff", 
+                "text-muted": "#202120ff",
+                "text-secondary": "#4c9a80",
             },
 
             fontFamily: { 

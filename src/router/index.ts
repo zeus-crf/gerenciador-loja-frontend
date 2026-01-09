@@ -3,6 +3,7 @@ import LoginView from '@/views/LoginView.vue'
 import PedidosView from '@/views/PedidosView.vue'
 import ClienteView from '@/views/ClienteView.vue'
 import UsuarioView from '@/views/UsuarioView.vue'
+import DashboardView from '@/views/DashboardView.vue'
 
 const routes: RouteRecordRaw[] = [
   {
@@ -11,7 +12,7 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/login',
-    name: 'Login',
+    name: 'login',
     component: LoginView
   },
   {
@@ -28,6 +29,11 @@ const routes: RouteRecordRaw[] = [
     path: '/usuarios',
     name: 'usuarios',
     component: UsuarioView
+  },
+  {
+    path: '/dashboard',
+    name: 'dashboard',
+    component: DashboardView
   }
 ]
 

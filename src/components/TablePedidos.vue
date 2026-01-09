@@ -10,7 +10,7 @@ import ModalViewPedido from './modais/ModalViewPedido.vue'
 import ModalDeletePedido from './modais/ModalDeletePedido.vue'
 
 // ======================
-// Tipos
+// TIPOS
 // ======================
 interface ItemPedido {
   nomeProduto: string
@@ -36,15 +36,22 @@ interface PedidoView extends Pedido {
 }
 
 // ======================
-// Props
+// PROPS
 // ======================
 const props = defineProps<{
   pedidos: Pedido[]
   loading: boolean
+  dashboard?: boolean
+  limit?: number
+}>()
+
+const emit = defineEmits<{
+  (e: 'deleted', id: string): void
+  (e: 'updated', pedido: Pedido): void
 }>()
 
 // ======================
-// Estado Local
+// ESTADO LOCAL
 // ======================
 const pedidosLocal = ref<Pedido[]>([])
 const toast = useToast()
@@ -59,7 +66,7 @@ const showDeleteModal = ref(false)
 const pedidoParaDeletar = ref<Pedido | null>(null)
 
 // ======================
-// Sync props → local
+// SYNC PROPS → LOCAL
 // ======================
 watch(
   () => props.pedidos,
@@ -70,7 +77,7 @@ watch(
 )
 
 // ======================
-// Ações
+// FUNÇÕES DE AÇÃO
 // ======================
 const editarPedido = (pedido: Pedido) => {
   pedidoSelecionado.value = { ...pedido }
@@ -90,45 +97,88 @@ const abrirModalDelete = (pedido: Pedido) => {
   showDeleteModal.value = true
 }
 
+// ======================
+// Atualizar pedido na lista
+// ======================
 const atualizarPedidoNaLista = (pedidoAtualizado: Pedido) => {
   const index = pedidosLocal.value.findIndex(p => p.id === pedidoAtualizado.id)
   if (index !== -1) {
     pedidosLocal.value.splice(index, 1, pedidoAtualizado)
+    emit('updated', pedidoAtualizado)
   }
   showEditModal.value = false
   toast.success('Pedido atualizado com sucesso!')
 }
 
+
+// ======================
+// Deletar pedido
+// ======================
 const deletarPedido = async (id: string) => {
   try {
     const token = localStorage.getItem('token')
     if (!token) throw new Error('Sessão expirada')
 
+    pedidosLocal.value = pedidosLocal.value.filter(p => p.id !== id)
+    emit('deleted', id) 
+    showDeleteModal.value = false
+    toast.success('Pedido deletado!')
+
     await axios.delete(`http://localhost:8080/pedidos/${id}`, {
       headers: { Authorization: `Bearer ${token}` }
     })
-
-    pedidosLocal.value = pedidosLocal.value.filter(p => p.id !== id)
-    showDeleteModal.value = false
-    toast.success('Pedido deletado!')
   } catch (err) {
     console.error(err)
     toast.error('Erro ao deletar pedido')
   }
 }
 
+
 // ======================
-// Paginação
+// Marcar como PAGO
+// ======================
+const mudarStatusParaPago = async (pedido: Pedido) => {
+  try {
+    const token = localStorage.getItem('token')
+    if (!token) throw new Error('Sessão expirada')
+
+    const response = await axios.patch(
+      `http://localhost:8080/pedidos/${pedido.id}/status`,
+      null,
+      {
+        params: { status: 'PAGO' },
+        headers: { Authorization: `Bearer ${token}` }
+      }
+    )
+
+    emit('updated', response.data)
+    toast.success('Pedido marcado como PAGO!')
+  } catch (err) {
+    console.error(err)
+    toast.error('Erro ao atualizar status do pedido')
+  }
+}
+
+// ======================
+// PAGINAÇÃO
 // ======================
 const currentPage = ref(1)
 const pageSize = ref(8)
 
-const totalPedidos = computed(() => pedidosLocal.value.length)
+const totalPedidos = computed(() =>
+  props.dashboard
+    ? Math.min(pedidosLocal.value.length, props.limit ?? 5)
+    : pedidosLocal.value.length
+)
+
 const totalPages = computed(() =>
   Math.ceil(totalPedidos.value / pageSize.value)
 )
 
 const pedidosPaginados = computed(() => {
+  if (props.dashboard) {
+    return pedidosLocal.value.slice(0, props.limit ?? 5)
+  }
   const start = (currentPage.value - 1) * pageSize.value
   return pedidosLocal.value.slice(start, start + pageSize.value)
 })
@@ -144,15 +194,12 @@ const endItem = computed(() =>
 )
 
 const goToPage = (page: number) => {
-  if (page >= 1 && page <= totalPages.value) {
-    currentPage.value = page
-  }
+  if (page >= 1 && page <= totalPages.value) currentPage.value = page
 }
 
 const nextPage = () => goToPage(currentPage.value + 1)
 const prevPage = () => goToPage(currentPage.value - 1)
 
-/** 👉 Paginação inteligente (1 … x x x … n) */
 const pagesToShow = computed<(number | string)[]>(() => {
   const total = totalPages.value
   const current = currentPage.value
@@ -164,26 +211,17 @@ const pagesToShow = computed<(number | string)[]>(() => {
   }
 
   pages.push(1)
-
   if (current > 3) pages.push('...')
-
   const start = Math.max(2, current - 1)
   const end = Math.min(total - 1, current + 1)
-
   for (let i = start; i <= end; i++) pages.push(i)
-
   if (current < total - 2) pages.push('...')
-
   pages.push(total)
-
   return pages
 })
 
-/** 👉 Evita erro string | number */
 const handlePageClick = (page: number | string) => {
-  if (typeof page === 'number') {
-    goToPage(page)
-  }
+  if (typeof page === 'number') goToPage(page)
 }
 
 watch(totalPedidos, () => {
@@ -198,49 +236,40 @@ watch(totalPedidos, () => {
         <table class="min-w-full divide-y">
           <thead class="bg-slate-100">
             <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Cliente</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Itens</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Pagamento</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Parcelas</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Ações</th>
+              <th class="px-6 py-3 text-left text-xs font-medium uppercase text-slate-500">Cliente</th>
+              <th class="px-6 py-3 text-left text-xs font-medium uppercase text-slate-500">Itens</th>
+              <th class="px-6 py-3 text-left text-xs font-medium uppercase text-slate-500">Pagamento</th>
+              <th class="px-6 py-3 text-left text-xs font-medium uppercase text-slate-500">Parcelas</th>
+              <th class="px-6 py-3 text-left text-xs font-medium uppercase text-slate-500">Ações</th>
             </tr>
           </thead>
 
           <tbody class="divide-y">
-            <tr v-if="loading">
+            <tr v-if="props.loading">
               <td colspan="5" class="px-6 py-4 text-center text-slate-500">Carregando...</td>
             </tr>
 
-            <tr v-else-if="!loading && totalPedidos === 0">
+            <tr v-else-if="!props.loading && totalPedidos === 0">
               <td colspan="5" class="px-6 py-4 text-center text-slate-500">Nenhum pedido encontrado</td>
             </tr>
 
-            <tr
-              v-else
-              v-for="pedido in pedidosPaginados"
-              :key="pedido.id"
-              class="hover:bg-slate-50"
-            >
-              <td class="px-6 py-4 font-medium text-slate-900">
-                {{ pedido.cliente?.nome || 'N/A' }}
-              </td>
+            <tr v-else v-for="pedido in pedidosPaginados" :key="pedido.id" class="hover:bg-slate-50">
+              <td class="px-6 py-4 font-medium text-slate-900">{{ pedido.cliente?.nome || 'N/A' }}</td>
 
               <td class="px-6 py-4 text-slate-600">
-                {{
-                  pedido.itens.length
-                    ? pedido.itens.map(i => i.nomeProduto).join(', ')
-                    : 'Sem itens'
-                }}
+                {{ pedido.itens.length ? pedido.itens.map(i => i.nomeProduto).join(', ') : 'Sem itens' }}
               </td>
 
               <td class="px-6 py-4">
                 <span
-                  class="rounded-full px-3 py-1 text-xs font-medium"
+                  class="rounded-full px-3 py-1 text-xs font-medium cursor-pointer"
                   :class="
                     pedido.statusDePagamento === 'PAGO'
                       ? 'bg-green-100 text-green-800'
-                      : 'bg-yellow-100 text-yellow-800'
+                      : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
                   "
+                  @click="pedido.statusDePagamento === 'PENDENTE' ? mudarStatusParaPago(pedido) : null"
+                  :title="pedido.statusDePagamento === 'PENDENTE' ? 'Clique para marcar como PAGO' : ''"
                 >
                   {{ pedido.statusDePagamento }}
                 </span>
@@ -269,64 +298,29 @@ watch(totalPedidos, () => {
       </div>
 
       <!-- PAGINAÇÃO -->
-      <div class="flex items-center justify-between border-t px-4 py-3 bg-slate-50">
+      <div v-if="!props.dashboard" class="flex items-center justify-between border-t px-4 py-3 bg-slate-50">
         <p class="text-sm text-slate-500">
-          <span v-if="totalPedidos > 0">
-            Mostrando {{ startItem }} a {{ endItem }} de {{ totalPedidos }}
-          </span>
+          <span v-if="totalPedidos > 0">Mostrando {{ startItem }} a {{ endItem }} de {{ totalPedidos }}</span>
           <span v-else>Nenhum registro para exibir</span>
         </p>
 
         <div class="flex items-center gap-1">
-          <button
-            @click="prevPage"
-            :disabled="currentPage === 1"
-            class="px-2 py-1 rounded hover:bg-slate-200"
-          >
-            ‹
-          </button>
+          <button @click="prevPage" :disabled="currentPage === 1" class="px-2 py-1 rounded hover:bg-slate-200">‹</button>
 
-          <button
-            v-for="page in pagesToShow"
-            :key="page"
-            @click="handlePageClick(page)"
+          <button v-for="page in pagesToShow" :key="page" @click="handlePageClick(page)"
             :disabled="page === '...'"
-            :class="
-              page === currentPage
-                ? 'bg-primary text-white px-3 py-1 rounded'
-                : 'px-3 py-1 rounded hover:bg-slate-100'
-            "
-          >
+            :class="page === currentPage ? 'bg-primary text-white px-3 py-1 rounded' : 'px-3 py-1 rounded hover:bg-slate-100'">
             {{ page }}
           </button>
 
-          <button
-            @click="nextPage"
-            :disabled="currentPage === totalPages"
-            class="px-2 py-1 rounded hover:bg-slate-200"
-          >
-            ›
-          </button>
+          <button @click="nextPage" :disabled="currentPage === totalPages" class="px-2 py-1 rounded hover:bg-slate-200">›</button>
         </div>
       </div>
     </div>
 
     <!-- MODAIS -->
-    <ModalEditPedido
-      v-model="showEditModal"
-      :pedido="pedidoSelecionado"
-      @submit="atualizarPedidoNaLista"
-    />
-
-    <ModalViewPedido
-      v-model="showViewModal"
-      :pedido="pedidoVisualizado"
-    />
-
-    <ModalDeletePedido
-      v-model="showDeleteModal"
-      :pedido="pedidoParaDeletar"
-      @deleted="deletarPedido"
-    />
+    <ModalEditPedido v-model="showEditModal" :pedido="pedidoSelecionado" @submit="atualizarPedidoNaLista" />
+    <ModalViewPedido v-model="showViewModal" :pedido="pedidoVisualizado" />
+    <ModalDeletePedido v-model="showDeleteModal" :pedido="pedidoParaDeletar" @deleted="deletarPedido" />
   </div>
 </template>

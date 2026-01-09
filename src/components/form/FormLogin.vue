@@ -24,15 +24,24 @@ async function handleLogin() {
       password: password.value
     })
 
-    // Salvar token corretamente
+    // ✅ TOKEN
     const token = response.data?.token ?? response.token
     localStorage.setItem('token', token)
 
+    // ✅ USUÁRIO (vem do backend)
+    const usuario = {
+      username: response.data?.username ?? response.username,
+      nome: response.data?.username ?? response.username // fallback
+    }
+
+    localStorage.setItem('usuario', JSON.stringify(usuario))
+
     toast.success('Login realizado com sucesso')
-    router.push('/pedidos')
+    router.push('/dashboard')
 
   } catch (error: any) {
-    errorMessage.value = error?.response?.data?.message || 'Usuário ou senha inválidos'
+    errorMessage.value =
+      error?.response?.data?.message || 'Usuário ou senha inválidos'
     toast.error(errorMessage.value)
   } finally {
     loading.value = false
