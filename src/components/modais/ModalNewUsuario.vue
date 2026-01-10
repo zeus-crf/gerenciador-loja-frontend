@@ -65,9 +65,9 @@ const salvar = async () => {
 
   try {
     const token = localStorage.getItem('token')
-
+    const baseUrl = import.meta.env.VITE_API_URL
     await axios.post(
-      'http://localhost:8080/usuarios',
+      `${baseUrl}/usuarios`,
       {
         username: form.value.username,
         password: form.value.password

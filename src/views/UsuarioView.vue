@@ -124,7 +124,7 @@ async function confirmarDelete(id: string) {
       return
     }
     const baseUrl = import.meta.env.VITE_API_URL
-    await axios.delete(`${baseUrl}/${id}`, {
+    await axios.delete(`${baseUrl}/usuarios/${id}`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },
