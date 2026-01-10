@@ -84,7 +84,7 @@ async function carregarUsuarios() {
   loading.value = true
 
   try {
-    const baseUrl = import.meta.env.VITE_URL_API
+    const baseUrl = import.meta.env.VITE_API_URL
     const response = await axios.get(`${baseUrl}/usuarios`, {
       headers: { Authorization: `Bearer ${token}` },
     })
