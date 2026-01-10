@@ -76,8 +76,9 @@ onMounted(() => {
 const carregarClientes = async () => {
   loading.value = true
   try {
+    const baseUrl = import.meta.env.VITE_API_URL
     const token = localStorage.getItem('token')
-    const { data } = await axios.get('http://localhost:8080/clientes', {
+    const { data } = await axios.get(`${baseUrl}/clientes`, {
       headers: { Authorization: `Bearer ${token}` }
     })
 
@@ -116,9 +117,9 @@ const aplicarFiltrosClientes = async (filtros: ClienteFilters) => {
     }
 
     console.log('📤 Payload enviado:', payload)
-
+    const baseUrl = import.meta.env.VITE_API_URL
     const { data } = await axios.post(
-      'http://localhost:8080/clientes/filtrar',
+      `${baseUrl}/clientes/filtrar`,
       payload,
       {
         headers: {
@@ -159,7 +160,8 @@ const deletarCliente = (cliente: Cliente) => {
 const confirmarDelete = async (id: string) => {
   try {
     const token = localStorage.getItem('token')
-    await axios.delete(`http://localhost:8080/clientes/${id}`, {
+    const baseUrl = import.meta.env.VITE_API_URL
+    await axios.delete(`${baseUrl}/${id}`, {
       headers: { Authorization: `Bearer ${token}` }
     })
     toast.success('Cliente deletado com sucesso')

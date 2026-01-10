@@ -2,6 +2,7 @@
 import { ref, watch, computed } from 'vue'
 import axios from 'axios'
 import { X } from 'lucide-vue-next'
+import api from '@/services/api'
 
 interface Cliente {
   id: string
@@ -50,25 +51,15 @@ watch(show, (open) => {
 const close = () => show.value = false
 
 // Salvar alterações
+
 const salvar = async () => {
-  const token = localStorage.getItem('token')
-
-  if (!token) {
-    emit('toast', { message: 'Usuário não autenticado', type: 'error' })
-    return
-  }
-
   if (!form.value.id) {
     emit('toast', { message: 'ID do cliente inválido', type: 'error' })
     return
   }
 
   try {
-    const res = await axios.put(
-      `http://localhost:8080/clientes/${form.value.id}`,
-      form.value,
-      { headers: { Authorization: `Bearer ${token}` } }
-    )
+    const res = await api.put(`/clientes/${form.value.id}`, form.value)
 
     emit('toast', { message: 'Cliente atualizado com sucesso!', type: 'success' })
     emit('saved', res.data)

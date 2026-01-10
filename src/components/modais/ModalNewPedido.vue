@@ -97,8 +97,9 @@ const clienteSelecionado = computed(() => {
 // Carrega clientes da API
 onMounted(async () => {
   try {
+    const baseUrl = import.meta.env.VITE_API_URL
     const token = localStorage.getItem('token')
-    const res = await axios.get('http://localhost:8080/clientes', {
+    const res = await axios.get(`${baseUrl}/clientes`, {
       headers: { Authorization: `Bearer ${token}` }
     })
     clientes.value = res.data._embedded?.clienteList || res.data || []
@@ -188,7 +189,8 @@ const salvarPedido = async () => {
     formData.value.statusDePagamento =
       paymentStatusFront.value === 'paid' ? 'PAGO' : 'PENDENTE'
 
-    const res = await axios.post('http://localhost:8080/pedidos', formData.value, {
+    const baseUrl = import.meta.env.VITE_API_URL  
+    const res = await axios.post(`${baseUrl}/pedidos`, formData.value, {
       headers: { Authorization: `Bearer ${token}` }
     })
 

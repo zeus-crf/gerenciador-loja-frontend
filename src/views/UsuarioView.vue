@@ -84,7 +84,8 @@ async function carregarUsuarios() {
   loading.value = true
 
   try {
-    const response = await axios.get('http://localhost:8080/usuarios', {
+    const baseUrl = import.meta.env.VITE_URL_API
+    const response = await axios.get(`${baseUrl}/usuarios`, {
       headers: { Authorization: `Bearer ${token}` },
     })
     usuarios.value = response.data
@@ -122,8 +123,8 @@ async function confirmarDelete(id: string) {
       toast.error('Sessão expirada. Faça login novamente.')
       return
     }
-
-    await axios.delete(`http://localhost:8080/usuarios/${id}`, {
+    const baseUrl = import.meta.env.VITE_API_URL
+    await axios.delete(`${baseUrl}/${id}`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },

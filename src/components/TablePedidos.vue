@@ -120,13 +120,16 @@ const deletarPedido = async (id: string) => {
     if (!token) throw new Error('Sessão expirada')
 
     pedidosLocal.value = pedidosLocal.value.filter(p => p.id !== id)
-    emit('deleted', id) 
+    emit('deleted', id)
     showDeleteModal.value = false
     toast.success('Pedido deletado!')
 
-    await axios.delete(`http://localhost:8080/pedidos/${id}`, {
+    const baseUrl = import.meta.env.VITE_API_URL // pega do .env ou Vercel
+
+    await axios.delete(`${baseUrl}/pedidos/${id}`, {
       headers: { Authorization: `Bearer ${token}` }
     })
+
   } catch (err) {
     console.error(err)
     toast.error('Erro ao deletar pedido')
@@ -142,8 +145,10 @@ const mudarStatusParaPago = async (pedido: Pedido) => {
     const token = localStorage.getItem('token')
     if (!token) throw new Error('Sessão expirada')
 
+    const baseUrl = import.meta.env.VITE_API_URL
+
     const response = await axios.patch(
-      `http://localhost:8080/pedidos/${pedido.id}/status`,
+      `${baseUrl}/pedidos/${pedido.id}/status`,
       null,
       {
         params: { status: 'PAGO' },
@@ -158,6 +163,7 @@ const mudarStatusParaPago = async (pedido: Pedido) => {
     toast.error('Erro ao atualizar status do pedido')
   }
 }
+
 
 // ======================
 // PAGINAÇÃO

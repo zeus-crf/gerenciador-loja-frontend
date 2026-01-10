@@ -140,16 +140,19 @@ const clientes = ref<Cliente[]>([])
 onMounted(async () => {
   try {
     const token = localStorage.getItem('token')
-    const res = await axios.get('http://localhost:8080/clientes', {
+    const baseUrl = import.meta.env.VITE_API_URL // pega do .env ou Vercel
+
+    const res = await axios.get(`${baseUrl}/clientes`, {
       headers: { Authorization: `Bearer ${token}` }
     })
-    clientes.value = res.data._embedded?.clienteList || []
+
+    clientes.value = res.data._embedded?.clienteList ?? []
     console.log('[Clientes] carregados:', clientes.value)
-  } catch {
+  } catch (err) {
+    console.error(err)
     emit('toast', { message: 'Erro ao carregar clientes', type: 'error' })
   }
 })
-
 watch(clienteSearch, val => {
   if (!val) {
     formData.value.idCliente = ''
@@ -211,22 +214,42 @@ const salvarPedido = async () => {
     let pedidoAtualizado
 
     if (isEditMode.value && props.pedido) {
-      console.log('[Salvar] Modo edição, PUT em: ', `http://localhost:8080/pedidos/${props.pedido.id}`)
-      const res = await axios.put(
-        `http://localhost:8080/pedidos/${props.pedido.id}`,
-        payload,
-        { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
-      )
-      pedidoAtualizado = res.data
-      console.log('[Salvar] Resposta PUT: ', pedidoAtualizado)
-    } else {
-      const res = await axios.post(
-        'http://localhost:8080/pedidos',
-        payload,
-        { headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } }
-      )
-      pedidoAtualizado = res.data
-    }
+        const baseUrl = import.meta.env.VITE_API_URL
+
+        const url = `${baseUrl}/pedidos/${props.pedido.id}`
+        console.log('[Salvar] Modo edição, PUT em:', url)
+
+        const res = await axios.put(
+          url,
+          payload,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        )
+
+        pedidoAtualizado = res.data
+        console.log('[Salvar] Resposta PUT:', pedidoAtualizado)
+
+      } else {
+        const baseUrl = import.meta.env.VITE_API_URL
+
+        const res = await axios.post(
+          `${baseUrl}/pedidos`,
+          payload,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        )
+
+  pedidoAtualizado = res.data
+}
+
 
     emit('toast', { message: 'Pedido salvo com sucesso!', type: 'success' })
     emit('submit', pedidoAtualizado)

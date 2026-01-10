@@ -88,20 +88,23 @@ const salvar = async () => {
     payload.password = form.value.password
   }
 
-  try {
-    const res = await axios.put(
-      `http://localhost:8080/usuarios/${form.value.id}`,
-      payload,
-      { headers: { Authorization: `Bearer ${token}` } }
-    )
+try {
+  const baseUrl = import.meta.env.VITE_API_URL
 
-    emit('toast', { message: 'Usuário atualizado com sucesso!', type: 'success' })
-    emit('saved', res.data)
-    close()
-  } catch (err: any) {
-    const msg = err.response?.data || 'Erro ao atualizar usuário'
-    emit('toast', { message: msg, type: 'error' })
-  }
+  const res = await axios.put(
+    `${baseUrl}/usuarios/${form.value.id}`,
+    payload,
+    { headers: { Authorization: `Bearer ${token}` } }
+  )
+
+  emit('toast', { message: 'Usuário atualizado com sucesso!', type: 'success' })
+  emit('saved', res.data)
+  close()
+} catch (err: any) {
+  console.error(err)
+  const msg = err.response?.data || 'Erro ao atualizar usuário'
+  emit('toast', { message: msg, type: 'error' })
+}
 }
 </script>
 

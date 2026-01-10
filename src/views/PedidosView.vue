@@ -93,7 +93,8 @@ const carregarPedidos = async () => {
   loading.value = true
   try {
     const token = localStorage.getItem('token')
-    const res = await axios.get('http://localhost:8080/pedidos', {
+    const baseURL = import.meta.env.VITE_API_URL
+    const res = await axios.get(`${baseURL}/pedidos`, {
       headers: { Authorization: `Bearer ${token}` }
     })
 
@@ -192,8 +193,8 @@ const deletarPedido = async (id: string) => {
       toast.error('Usuário não autenticado')
       return
     }
-
-    await axios.delete(`http://localhost:8080/pedidos/${id}`, {
+    const baseURL = import.meta.env.VITE_API_URL
+    await axios.delete(`${baseURL}/${id}`, {
       headers: { Authorization: `Bearer ${token}` }
     })
     pedidos.value = pedidos.value.filter(p => p.id !== id)

@@ -36,10 +36,11 @@ onMounted(() => {
 async function logout() {
   try {
     const token = localStorage.getItem('token')
+    const baseUrl = import.meta.env.VITE_API_URL
 
     if (token) {
       await axios.post(
-        'http://localhost:8080/auth/logout',
+        `${baseUrl}/auth/logout`,
         {},
         {
           headers: {
@@ -56,6 +57,7 @@ async function logout() {
     router.push('/login')
   }
 }
+
 </script>
 
 
