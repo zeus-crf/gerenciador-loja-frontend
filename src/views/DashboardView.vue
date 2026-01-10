@@ -194,7 +194,9 @@ const pedidosParaTabela = computed(() =>
     ...p,
     cliente: {
       id: p.cliente?.id ?? '',
-      nome: p.cliente?.nome ?? 'Cliente'
+      nome: p.cliente?.nome ?? 'Cliente',
+      telefone: p.cliente?.telefone ?? 'Sem telefone',
+      email: p.cliente?.email ?? 'Sem email'
     }
   }))
 )
