@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory, RouteRecordRaw } from 'vue-router'
+
 import LoginView from '@/views/LoginView.vue'
 import PedidosView from '@/views/PedidosView.vue'
 import ClienteView from '@/views/ClienteView.vue'
