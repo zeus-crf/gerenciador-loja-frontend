@@ -263,140 +263,220 @@ const salvarPedido = async () => {
 
 const canSubmit = computed(() => !!formData.value.idCliente && formData.value.itens.length > 0)
 </script>
-
 <template>
-  <div v-if="internalShow" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-    <div class="w-full max-w-4xl rounded-xl bg-background-light shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
-      
-      <!-- HEADER -->
-      <div class="flex items-center justify-between border-b border-slate-200 px-4 py-3">
-        <div class="flex flex-col leading-tight">
-          <p class="text-lg font-bold text-slate-900">{{ isEditMode ? 'Editar Pedido' : 'Novo Pedido' }}</p>
-          <p class="text-sm text-slate-500">{{ isEditMode ? 'Altere os dados do pedido.' : 'Preencha os dados abaixo.' }}</p>
-        </div>
-        <button @click="close" class="h-10 w-10 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600">
-          <X />
-        </button>
-      </div>
-
-      <!-- BODY -->
-      <div class="flex-grow overflow-y-auto p-6 flex flex-col gap-6">
-        <!-- CLIENTE -->
-        <div>
-          <h2 class="text-lg font-bold text-slate-900 pb-2">Dados do Cliente</h2>
-          <v-combobox
-            v-model="clienteSearch"
-            label="Digite o nome do cliente"
-            :items="clientes.map(c => c.name)"
-            clearable
-            variant="outlined"
-            hide-details
-          />
-          <p v-if="formData.idCliente" class="mt-2 text-sm text-slate-600">
-            Cliente selecionado: <span class="font-semibold">{{ clienteSelecionado?.name }}</span>
-            <X class="inline ml-2 cursor-pointer" @click="removerClienteSelecionado" />
-          </p>
-        </div>
-
-        <!-- ITENS -->
-        <div>
-          <h2 class="text-lg font-bold text-slate-900 pb-2">Itens do Pedido</h2>
-          <table class="w-full border border-slate-200 rounded-lg overflow-hidden">
-            <thead class="bg-slate-100">
-              <tr>
-                <th class="px-4 py-2 text-left">Produto</th>
-                <th class="px-4 py-2 text-left">Qtd.</th>
-                <th class="px-4 py-2 text-left">Preço Unit.</th>
-                <th class="px-4 py-2 text-left">Subtotal</th>
-                <th class="px-4 py-2"></th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(item, index) in formData.itens" :key="index" class="border-b border-slate-200">
-                <td class="px-4 py-2">{{ item.nome }}</td>
-                <td class="px-4 py-2">{{ item.quantidade }}</td>
-                <td class="px-4 py-2">{{ formatCurrency(item.preco) }}</td>
-                <td class="px-4 py-2">{{ formatCurrency(item.preco * item.quantidade) }}</td>
-                <td class="px-4 py-2">
-                  <button @click="removeItem(index)" class="text-red-500 hover:text-red-700">
-                    <Trash2 />
-                  </button>
-                </td>
-              </tr>
-              <tr v-if="formData.itens.length === 0">
-                <td colspan="5" class="px-4 py-6 text-center text-slate-500">Nenhum item adicionado</td>
-              </tr>
-            </tbody>
-          </table>
-          <button @click="openItemModal" class="mt-3 flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary rounded-lg hover:bg-primary/20">
-            <Plus /> Adicionar Produto
-          </button>
-
-          <!-- TOTAL -->
-          <div class="mt-4 text-right">
-            <p class="text-sm text-slate-600">Total do Pedido:</p>
-            <p class="text-2xl font-bold text-slate-900">{{ formatCurrency(total) }}</p>
-            <p class="text-sm text-slate-600">{{ formData.parcelasTotais }}x de <span class="font-semibold text-slate-900">{{ formatCurrency(valorParcela) }}</span></p>
+  <Teleport to="body">
+    <div
+      v-if="internalShow"
+      class="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4"
+    >
+      <!-- CONTAINER DO MODAL -->
+      <div
+        class="w-full max-w-4xl max-h-[90vh] rounded-xl bg-background-light shadow-2xl flex flex-col overflow-hidden"
+      >
+        <!-- HEADER -->
+        <div
+          class="flex items-center justify-between border-b border-slate-200 px-4 py-3 flex-shrink-0"
+        >
+          <div class="flex flex-col leading-tight">
+            <p class="text-lg font-bold text-slate-900">
+              {{ isEditMode ? 'Editar Pedido' : 'Novo Pedido' }}
+            </p>
+            <p class="text-sm text-slate-500">
+              {{ isEditMode ? 'Altere os dados do pedido.' : 'Preencha os dados abaixo.' }}
+            </p>
           </div>
+
+          <button
+            @click="close"
+            class="h-10 w-10 flex items-center justify-center rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600"
+          >
+            <X />
+          </button>
         </div>
 
-        <!-- PAGAMENTO -->
-        <div class="pt-6 border-t border-slate-200 flex flex-col gap-6">
-          <h2 class="text-lg font-bold tracking-tight text-slate-900 pt-5">Detalhes do Pagamento</h2>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <div class="flex flex-col gap-2">
-              <v-select
-                v-model="paymentStatusFront"
-                label="Status do pagamento"
-                :items="[
-                  { title: 'Pago', value: 'paid' },
-                  { title: 'Pendente', value: 'pending' },
-                  { title: 'Parcelado', value: 'installment' }
-                ]"
-                variant="outlined"
-                density="compact"
+        <!-- BODY (ÁREA COM SCROLL) -->
+        <div class="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
+          <!-- CLIENTE -->
+          <div>
+            <h2 class="text-lg font-bold text-slate-900 pb-2">Dados do Cliente</h2>
+
+            <v-combobox
+              v-model="clienteSearch"
+              label="Digite o nome do cliente"
+              :items="clientes.map(c => c.name)"
+              clearable
+              variant="outlined"
+              hide-details
+              :menu-props="{ attach: true, zIndex: 1000 }"
+            />
+
+            <p v-if="formData.idCliente" class="mt-2 text-sm text-slate-600">
+              Cliente selecionado:
+              <span class="font-semibold">{{ clienteSelecionado?.name }}</span>
+              <X
+                class="inline ml-2 cursor-pointer"
+                @click="removerClienteSelecionado"
               />
-            </div>
-            <div v-if="paymentStatusFront !== 'paid'" class="flex flex-col gap-2">
-              <v-text-field
-                v-model.number="formData.parcelasTotais"
-                label="Número de parcelas totais"
-                type="number"
-                min="1"
-                variant="outlined"
-                density="comfortable"
-                hide-details
-              />
-              <v-text-field
-                v-if="isEditMode"
-                v-model.number="formData.parcelasPagas"
-                label="Parcelas já pagas"
-                type="number"
-                :min="0"
-                :max="formData.parcelasTotais"
-                variant="outlined"
-                density="comfortable"
-                hide-details
-              />
-              <p class="text-sm text-slate-500">
-                Restam <span class="font-semibold text-slate-900">{{ formData.parcelasRestantes }}</span> parcela(s) de
-                <span class="font-semibold text-slate-900">{{ formatCurrency(valorParcela) }}</span>
+            </p>
+          </div>
+
+          <!-- ITENS -->
+          <div>
+            <h2 class="text-lg font-bold text-slate-900 pb-2">Itens do Pedido</h2>
+
+            <table class="w-full border border-slate-200 rounded-lg overflow-hidden">
+              <thead class="bg-slate-100">
+                <tr>
+                  <th class="px-4 py-2 text-left">Produto</th>
+                  <th class="px-4 py-2 text-left">Qtd.</th>
+                  <th class="px-4 py-2 text-left">Preço Unit.</th>
+                  <th class="px-4 py-2 text-left">Subtotal</th>
+                  <th class="px-4 py-2"></th>
+                </tr>
+              </thead>
+
+              <tbody>
+                <tr
+                  v-for="(item, index) in formData.itens"
+                  :key="index"
+                  class="border-b border-slate-200"
+                >
+                  <td class="px-4 py-2">{{ item.nome }}</td>
+                  <td class="px-4 py-2">{{ item.quantidade }}</td>
+                  <td class="px-4 py-2">{{ formatCurrency(item.preco) }}</td>
+                  <td class="px-4 py-2">
+                    {{ formatCurrency(item.preco * item.quantidade) }}
+                  </td>
+                  <td class="px-4 py-2">
+                    <button
+                      @click="removeItem(index)"
+                      class="text-red-500 hover:text-red-700"
+                    >
+                      <Trash2 />
+                    </button>
+                  </td>
+                </tr>
+
+                <tr v-if="formData.itens.length === 0">
+                  <td colspan="5" class="px-4 py-6 text-center text-slate-500">
+                    Nenhum item adicionado
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            <button
+              @click="openItemModal"
+              class="mt-3 flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary rounded-lg hover:bg-primary/20"
+            >
+              <Plus /> Adicionar Produto
+            </button>
+
+            <!-- TOTAL -->
+            <div class="mt-4 text-right">
+              <p class="text-sm text-slate-600">Total do Pedido:</p>
+              <p class="text-2xl font-bold text-slate-900">
+                {{ formatCurrency(total) }}
+              </p>
+              <p class="text-sm text-slate-600">
+                {{ formData.parcelasTotais }}x de
+                <span class="font-semibold text-slate-900">
+                  {{ formatCurrency(valorParcela) }}
+                </span>
               </p>
             </div>
           </div>
+
+          <!-- PAGAMENTO -->
+          <div class="pt-6 border-t border-slate-200 flex flex-col gap-6">
+            <h2 class="text-lg font-bold text-slate-900">
+              Detalhes do Pagamento
+            </h2>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <v-select
+                  v-model="paymentStatusFront"
+                  label="Status do pagamento"
+                  :items="[
+                    { title: 'Pago', value: 'paid' },
+                    { title: 'Pendente', value: 'pending' },
+                    { title: 'Parcelado', value: 'installment' }
+                  ]"
+                  variant="outlined"
+                  density="compact"
+                  :menu-props="{
+                    attach: 'body',
+                    zIndex: 11000
+                  }"
+                />
+
+
+              <div
+                v-if="paymentStatusFront !== 'paid'"
+                class="flex flex-col gap-2"
+              >
+                <v-text-field
+                  v-model.number="formData.parcelasTotais"
+                  label="Número de parcelas totais"
+                  type="number"
+                  min="1"
+                  variant="outlined"
+                  hide-details
+                />
+
+                <v-text-field
+                  v-if="isEditMode"
+                  v-model.number="formData.parcelasPagas"
+                  label="Parcelas já pagas"
+                  type="number"
+                  :min="0"
+                  :max="formData.parcelasTotais"
+                  variant="outlined"
+                  hide-details
+                />
+
+                <p class="text-sm text-slate-500">
+                  Restam
+                  <span class="font-semibold text-slate-900">
+                    {{ formData.parcelasRestantes }}
+                  </span>
+                  parcela(s) de
+                  <span class="font-semibold text-slate-900">
+                    {{ formatCurrency(valorParcela) }}
+                  </span>
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- FOOTER (FIXO) -->
+        <div
+          class="flex justify-end gap-3 p-6 border-t border-slate-200 bg-slate-50 flex-shrink-0 zIndex-900"
+        >
+          <button
+            @click="close"
+            class="px-4 py-2 rounded-lg bg-slate-200 text-slate-900 hover:bg-slate-300"
+          >
+            Cancelar
+          </button>
+
+          <button
+            @click="salvarPedido"
+            :disabled="!canSubmit"
+            class="px-4 py-2 rounded-lg bg-primary text-white disabled:opacity-50"
+          >
+            {{ isEditMode ? 'Salvar Alterações' : 'Salvar Pedido' }}
+          </button>
         </div>
       </div>
 
-      <!-- FOOTER -->
-      <div class="flex justify-end gap-3 p-6 border-t border-slate-200 bg-slate-50 flex-shrink-0">
-        <button @click="close" class="px-4 py-2 rounded-lg bg-slate-200 text-slate-900 hover:bg-slate-300">Cancelar</button>
-        <button @click="salvarPedido" :disabled="!canSubmit" class="px-4 py-2 rounded-lg bg-primary text-white disabled:opacity-50 disabled:cursor-not-allowed">
-          {{ isEditMode ? 'Salvar Alterações' : 'Salvar Pedido' }}
-        </button>
-      </div>
+      <!-- MODAL DE ITEM -->
+      <ModalNewItem
+        v-model="showItemModal"
+        @add="addItemFromModal"
+      />
     </div>
-
-    <!-- Modal de Item -->
-    <ModalNewItem v-model="showItemModal" @add="addItemFromModal" />
-  </div>
+  </Teleport>
 </template>
+

@@ -9,9 +9,9 @@ import ModalEditPedido from './modais/ModalEditPedido.vue'
 import ModalViewPedido from './modais/ModalViewPedido.vue'
 import ModalDeletePedido from './modais/ModalDeletePedido.vue'
 
-// ======================
-// TIPOS
-// ======================
+/* ======================
+   TIPOS
+====================== */
 interface ItemPedido {
   nomeProduto: string
   quantidade: number
@@ -35,9 +35,9 @@ interface PedidoView extends Pedido {
   parcelasPagas: number
 }
 
-// ======================
-// PROPS
-// ======================
+/* ======================
+   PROPS / EMITS
+====================== */
 const props = defineProps<{
   pedidos: Pedido[]
   loading: boolean
@@ -50,105 +50,103 @@ const emit = defineEmits<{
   (e: 'updated', pedido: Pedido): void
 }>()
 
-// ======================
-// ESTADO LOCAL
-// ======================
+/* ======================
+   ESTADO LOCAL
+====================== */
 const pedidosLocal = ref<Pedido[]>([])
 const toast = useToast()
 
-const showEditModal = ref(false)
-const pedidoSelecionado = ref<Pedido | null>(null)
+// 🔥 CONTROLE CENTRAL DOS MODAIS
+const modalAtivo = ref<'edit' | 'view' | 'delete' | null>(null)
+const pedidoAtivo = ref<any | null>(null)
 
-const showViewModal = ref(false)
-const pedidoVisualizado = ref<PedidoView | null>(null)
-
-const showDeleteModal = ref(false)
-const pedidoParaDeletar = ref<Pedido | null>(null)
-
-// ======================
-// SYNC PROPS → LOCAL
-// ======================
+/* ======================
+   SYNC PROPS → LOCAL
+====================== */
 watch(
   () => props.pedidos,
   (val) => {
-    pedidosLocal.value = [...val]
+    pedidosLocal.value = JSON.parse(JSON.stringify(val))
   },
   { immediate: true }
 )
 
-// ======================
-// FUNÇÕES DE AÇÃO
-// ======================
-const editarPedido = (pedido: Pedido) => {
-  pedidoSelecionado.value = { ...pedido }
-  showEditModal.value = true
+/* ======================
+   HELPERS
+====================== */
+function resetarModal() {
+  modalAtivo.value = null
+  pedidoAtivo.value = null
 }
 
-const visualizarPedido = (pedido: Pedido) => {
-  pedidoVisualizado.value = {
-    ...pedido,
+/* ======================
+   AÇÕES
+====================== */
+function editarPedido(pedido: Pedido) {
+  pedidoAtivo.value = JSON.parse(JSON.stringify(pedido))
+  modalAtivo.value = 'edit'
+}
+
+function visualizarPedido(pedido: Pedido) {
+  pedidoAtivo.value = {
+    ...JSON.parse(JSON.stringify(pedido)),
     parcelasPagas: pedido.parcelasTotais - pedido.parcelasRestantes
   }
-  showViewModal.value = true
+  modalAtivo.value = 'view'
 }
 
-const abrirModalDelete = (pedido: Pedido) => {
-  pedidoParaDeletar.value = pedido
-  showDeleteModal.value = true
+function abrirModalDelete(pedido: Pedido) {
+  pedidoAtivo.value = JSON.parse(JSON.stringify(pedido))
+  modalAtivo.value = 'delete'
 }
 
-// ======================
-// Atualizar pedido na lista
-// ======================
-const atualizarPedidoNaLista = (pedidoAtualizado: Pedido) => {
+/* ======================
+   UPDATE
+====================== */
+function atualizarPedidoNaLista(pedidoAtualizado: Pedido) {
   const index = pedidosLocal.value.findIndex(p => p.id === pedidoAtualizado.id)
   if (index !== -1) {
     pedidosLocal.value.splice(index, 1, pedidoAtualizado)
     emit('updated', pedidoAtualizado)
   }
-  showEditModal.value = false
+
   toast.success('Pedido atualizado com sucesso!')
+  resetarModal()
 }
 
-
-// ======================
-// Deletar pedido
-// ======================
-const deletarPedido = async (id: string) => {
+/* ======================
+   DELETE
+====================== */
+async function deletarPedido(id: string) {
   try {
     const token = localStorage.getItem('token')
     if (!token) throw new Error('Sessão expirada')
 
     pedidosLocal.value = pedidosLocal.value.filter(p => p.id !== id)
     emit('deleted', id)
-    showDeleteModal.value = false
-    toast.success('Pedido deletado!')
 
-    const baseUrl = import.meta.env.VITE_API_URL // pega do .env ou Vercel
-
-    await axios.delete(`${baseUrl}/pedidos/${id}`, {
+    await axios.delete(`${import.meta.env.VITE_API_URL}/pedidos/${id}`, {
       headers: { Authorization: `Bearer ${token}` }
     })
 
+    toast.success('Pedido deletado!')
+    resetarModal()
   } catch (err) {
     console.error(err)
     toast.error('Erro ao deletar pedido')
   }
 }
 
-
-// ======================
-// Marcar como PAGO
-// ======================
-const mudarStatusParaPago = async (pedido: Pedido) => {
+/* ======================
+   STATUS PAGO
+====================== */
+async function mudarStatusParaPago(pedido: Pedido) {
   try {
     const token = localStorage.getItem('token')
     if (!token) throw new Error('Sessão expirada')
 
-    const baseUrl = import.meta.env.VITE_API_URL
-
     const response = await axios.patch(
-      `${baseUrl}/pedidos/${pedido.id}/status`,
+      `${import.meta.env.VITE_API_URL}/pedidos/${pedido.id}/status`,
       null,
       {
         params: { status: 'PAGO' },
@@ -160,14 +158,13 @@ const mudarStatusParaPago = async (pedido: Pedido) => {
     toast.success('Pedido marcado como PAGO!')
   } catch (err) {
     console.error(err)
-    toast.error('Erro ao atualizar status do pedido')
+    toast.error('Erro ao atualizar status')
   }
 }
 
-
-// ======================
-// PAGINAÇÃO
-// ======================
+/* ======================
+   PAGINAÇÃO
+====================== */
 const currentPage = ref(1)
 const pageSize = ref(8)
 
@@ -177,156 +174,88 @@ const totalPedidos = computed(() =>
     : pedidosLocal.value.length
 )
 
-const totalPages = computed(() =>
-  Math.ceil(totalPedidos.value / pageSize.value)
-)
-
 const pedidosPaginados = computed(() => {
-  if (props.dashboard) {
-    return pedidosLocal.value.slice(0, props.limit ?? 5)
-  }
+  if (props.dashboard) return pedidosLocal.value.slice(0, props.limit ?? 5)
   const start = (currentPage.value - 1) * pageSize.value
   return pedidosLocal.value.slice(start, start + pageSize.value)
-})
-
-const startItem = computed(() =>
-  totalPedidos.value === 0
-    ? 0
-    : (currentPage.value - 1) * pageSize.value + 1
-)
-
-const endItem = computed(() =>
-  Math.min(currentPage.value * pageSize.value, totalPedidos.value)
-)
-
-const goToPage = (page: number) => {
-  if (page >= 1 && page <= totalPages.value) currentPage.value = page
-}
-
-const nextPage = () => goToPage(currentPage.value + 1)
-const prevPage = () => goToPage(currentPage.value - 1)
-
-const pagesToShow = computed<(number | string)[]>(() => {
-  const total = totalPages.value
-  const current = currentPage.value
-  const pages: (number | string)[] = []
-
-  if (total <= 5) {
-    for (let i = 1; i <= total; i++) pages.push(i)
-    return pages
-  }
-
-  pages.push(1)
-  if (current > 3) pages.push('...')
-  const start = Math.max(2, current - 1)
-  const end = Math.min(total - 1, current + 1)
-  for (let i = start; i <= end; i++) pages.push(i)
-  if (current < total - 2) pages.push('...')
-  pages.push(total)
-  return pages
-})
-
-const handlePageClick = (page: number | string) => {
-  if (typeof page === 'number') goToPage(page)
-}
-
-watch(totalPedidos, () => {
-  currentPage.value = 1
 })
 </script>
 
 <template>
   <div class="mt-4">
     <div class="overflow-hidden rounded-xl border bg-white shadow">
-      <div class="overflow-x-auto">
-        <table class="min-w-full divide-y">
-          <thead class="bg-slate-100">
-            <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium uppercase text-slate-500">Cliente</th>
-              <th class="px-6 py-3 text-left text-xs font-medium uppercase text-slate-500">Itens</th>
-              <th class="px-6 py-3 text-left text-xs font-medium uppercase text-slate-500">Pagamento</th>
-              <th class="px-6 py-3 text-left text-xs font-medium uppercase text-slate-500">Parcelas</th>
-              <th class="px-6 py-3 text-left text-xs font-medium uppercase text-slate-500">Ações</th>
-            </tr>
-          </thead>
+      <table class="min-w-full divide-y">
+        <thead class="bg-slate-100">
+          <tr>
+            <th class="px-6 py-3 text-left text-xs font-medium">Cliente</th>
+            <th class="px-6 py-3 text-left text-xs font-medium">Itens</th>
+            <th class="px-6 py-3 text-left text-xs font-medium">Pagamento</th>
+            <th class="px-6 py-3 text-left text-xs font-medium">Parcelas</th>
+            <th class="px-6 py-3 text-left text-xs font-medium">Ações</th>
+          </tr>
+        </thead>
 
-          <tbody class="divide-y">
-            <tr v-if="props.loading">
-              <td colspan="5" class="px-6 py-4 text-center text-slate-500">Carregando...</td>
-            </tr>
+        <tbody>
+          <tr v-for="pedido in pedidosPaginados" :key="pedido.id">
+            <td class="px-6 py-4">{{ pedido.cliente.nome }}</td>
+            <td class="px-6 py-4">
+              {{ pedido.itens.map(i => i.nomeProduto).join(', ') }}
+            </td>
 
-            <tr v-else-if="!props.loading && totalPedidos === 0">
-              <td colspan="5" class="px-6 py-4 text-center text-slate-500">Nenhum pedido encontrado</td>
-            </tr>
+            <td class="px-6 py-4">
+              <span
+                class="cursor-pointer rounded-full px-3 py-1 text-xs"
+                :class="pedido.statusDePagamento === 'PAGO'
+                  ? 'bg-green-100 text-green-800'
+                  : 'bg-yellow-100 text-yellow-800'"
+                @click="pedido.statusDePagamento === 'PENDENTE' && mudarStatusParaPago(pedido)"
+              >
+                {{ pedido.statusDePagamento }}
+              </span>
+            </td>
 
-            <tr v-else v-for="pedido in pedidosPaginados" :key="pedido.id" class="hover:bg-slate-50">
-              <td class="px-6 py-4 font-medium text-slate-900">{{ pedido.cliente?.nome || 'N/A' }}</td>
+            <td class="px-6 py-4">
+              {{ pedido.parcelasTotais - pedido.parcelasRestantes }}/{{ pedido.parcelasTotais }}
+            </td>
 
-              <td class="px-6 py-4 text-slate-600">
-                {{ pedido.itens.length ? pedido.itens.map(i => i.nomeProduto).join(', ') : 'Sem itens' }}
-              </td>
-
-              <td class="px-6 py-4">
-                <span
-                  class="rounded-full px-3 py-1 text-xs font-medium cursor-pointer"
-                  :class="
-                    pedido.statusDePagamento === 'PAGO'
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
-                  "
-                  @click="pedido.statusDePagamento === 'PENDENTE' ? mudarStatusParaPago(pedido) : null"
-                  :title="pedido.statusDePagamento === 'PENDENTE' ? 'Clique para marcar como PAGO' : ''"
-                >
-                  {{ pedido.statusDePagamento }}
-                </span>
-              </td>
-
-              <td class="px-6 py-4 text-slate-600">
-                {{ pedido.parcelasTotais - pedido.parcelasRestantes }}/{{ pedido.parcelasTotais }}
-              </td>
-
-              <td class="px-6 py-4">
-                <div class="flex gap-3">
-                  <button class="text-primary hover:text-slate-800" @click="visualizarPedido(pedido)">
-                    <Eye class="w-5 h-5" />
-                  </button>
-                  <button class="text-primary hover:text-primary-dark" @click="editarPedido(pedido)">
-                    <Pencil class="w-5 h-5" />
-                  </button>
-                  <button class="text-red-600 hover:text-red-800" @click="abrirModalDelete(pedido)">
-                    <Trash2 class="w-5 h-5" />
-                  </button>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- PAGINAÇÃO -->
-      <div v-if="!props.dashboard" class="flex items-center justify-between border-t px-4 py-3 bg-slate-50">
-        <p class="text-sm text-slate-500">
-          <span v-if="totalPedidos > 0">Mostrando {{ startItem }} a {{ endItem }} de {{ totalPedidos }}</span>
-          <span v-else>Nenhum registro para exibir</span>
-        </p>
-
-        <div class="flex items-center gap-1">
-          <button @click="prevPage" :disabled="currentPage === 1" class="px-2 py-1 rounded hover:bg-slate-200">‹</button>
-
-          <button v-for="page in pagesToShow" :key="page" @click="handlePageClick(page)"
-            :disabled="page === '...'"
-            :class="page === currentPage ? 'bg-primary text-white px-3 py-1 rounded' : 'px-3 py-1 rounded hover:bg-slate-100'">
-            {{ page }}
-          </button>
-
-          <button @click="nextPage" :disabled="currentPage === totalPages" class="px-2 py-1 rounded hover:bg-slate-200">›</button>
-        </div>
-      </div>
+            <td class="px-6 py-4 flex gap-3">
+              <Eye class="w-5 h-5 cursor-pointer text-primary" @click="visualizarPedido(pedido)" />
+              <Pencil class="w-5 h-5 cursor-pointer text-primary" @click="editarPedido(pedido)" />
+              <Trash2 class="w-5 h-5 cursor-pointer text-red-600" @click="abrirModalDelete(pedido)" />
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
-    <!-- MODAIS -->
-    <ModalEditPedido v-model="showEditModal" :pedido="pedidoSelecionado" @submit="atualizarPedidoNaLista" />
-    <ModalViewPedido v-model="showViewModal" :pedido="pedidoVisualizado" />
-    <ModalDeletePedido v-model="showDeleteModal" :pedido="pedidoParaDeletar" @deleted="deletarPedido" />
+    <!-- 🔥 MODAIS CORRETOS (SEM v-model, COM key) -->
+
+    <ModalEditPedido
+  v-if="modalAtivo === 'edit' && pedidoAtivo"
+  :key="`edit-${pedidoAtivo.id}`"
+  :model-value="modalAtivo === 'edit'"
+  :pedido="pedidoAtivo"
+  @update:modelValue="resetarModal"
+  @submit="atualizarPedidoNaLista"
+/>
+
+<ModalViewPedido
+  v-if="modalAtivo === 'view' && pedidoAtivo"
+  :key="`view-${pedidoAtivo.id}`"
+  :model-value="modalAtivo === 'view'"
+  :pedido="pedidoAtivo"
+  @update:modelValue="resetarModal"
+/>
+
+<ModalDeletePedido
+  v-if="modalAtivo === 'delete' && pedidoAtivo"
+  :key="`delete-${pedidoAtivo.id}`"
+  :model-value="modalAtivo === 'delete'"
+  :pedido="pedidoAtivo"
+  @update:modelValue="resetarModal"
+  @deleted="deletarPedido"
+/>
+
+
   </div>
 </template>
