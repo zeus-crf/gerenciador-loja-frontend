@@ -20,28 +20,41 @@ interface ItemPedido {
   quantidade: number
   precoUnitario: number
   tamanho: string
-  cor?: string
+}
+
+interface Parcela {
+  numero: number
+  valor: number
+  dataVencimento: string
+  status: 'ABERTA' | 'PAGA' | 'VENCIDA'
 }
 
 interface PedidoBackend {
   id: string
-  cliente: { id: string; nome: string; email?: string; telefone?: string }
+  cliente: { id: string; nome: string }
   itens: ItemPedido[]
   parcelasTotais: number
   parcelasRestantes: number
   parcelasPagas: number
+  parcelas: Parcela[]
   statusDePagamento: 'PAGO' | 'PENDENTE'
+  formaPagamento: 'PIX' | 'CREDITO' | 'DEBITO' | 'DINHEIRO'
+  dataPrimeiroVencimento: string
+  valorParcelas: number
+  diaVencimento: number
   dataCriacao?: string
   proximaParcelaVencimento?: string
-  formaPagamento?: string
 }
 
 interface NovoPedido {
+  id?: string
   idCliente: string
   itens: ItemPedidoDto[]
   parcelasTotais: number
   parcelasRestantes: number
   statusDePagamento: 'PAGO' | 'PENDENTE'
+  formaPagamento?: string
+  dataPrimeiroVencimento?: Date
 }
 
 interface Cliente {
@@ -59,6 +72,11 @@ const emit = defineEmits<{
   (e: 'error', msg: string): void
 }>()
 
+const clienteSelecionadoObj = ref<{ label: string; value: string } | null>(null)
+watch(clienteSelecionadoObj, val => {
+  formData.value.idCliente = val?.value || ''
+})
+
 // ======================
 // Controle do modal
 // ======================
@@ -67,17 +85,22 @@ const internalShow = computed({
   set: v => emit('update:modelValue', v)
 })
 const close = () => (internalShow.value = false)
+const menu = ref(false)
 
 // ======================
 // Estado do formulário
 // ======================
 const formData = ref<NovoPedido>({
+  id: undefined,
   idCliente: '',
   itens: [],
   parcelasTotais: 1,
   parcelasRestantes: 1,
-  statusDePagamento: 'PENDENTE'
+  statusDePagamento: 'PENDENTE',
+  formaPagamento: undefined,
+  dataPrimeiroVencimento: undefined
 })
+
 const paymentStatusFront = ref<'paid' | 'pending' | 'installment'>('pending')
 
 // ======================
@@ -87,14 +110,10 @@ const clientes = ref<Cliente[]>([])
 const clienteSelecionadoId = ref('')
 const clienteSearch = ref('')
 
-// Computed para pegar cliente selecionado
-const clienteSelecionado = computed(() => {
-  const found = clientes.value.find(c => c.id === clienteSelecionadoId.value)
-  console.log('Computando clienteSelecionado:', clienteSelecionadoId.value, found)
-  return found
-})
+const clienteSelecionado = computed(() =>
+  clientes.value.find(c => c.id === clienteSelecionadoId.value)
+)
 
-// Carrega clientes da API
 onMounted(async () => {
   try {
     const baseUrl = import.meta.env.VITE_API_URL
@@ -103,28 +122,18 @@ onMounted(async () => {
       headers: { Authorization: `Bearer ${token}` }
     })
     clientes.value = res.data._embedded?.clienteList || res.data || []
-    console.log('Clientes carregados:', clientes.value)
-  } catch (err) {
-    console.error('Erro ao carregar clientes:', err)
+  } catch {
     emit('error', 'Erro ao carregar clientes')
   }
 })
 
-// Transforma clientes para o combobox
-const clienteItems = computed(() => {
-  const items = clientes.value.map(c => ({
-    label: c.nome,
-    value: c.id
-  }))
-  console.log('clienteItems:', items)
-  return items
-})
-
-// Watch para sincronizar formData
+const clienteItems = computed(() =>
+  clientes.value.map(c => ({ label: c.nome, value: c.id }))
+)
 watch(clienteSelecionadoId, id => {
-  console.log('clienteSelecionadoId mudou:', id)
   formData.value.idCliente = id || ''
 })
+
 // ======================
 // Watchers de parcelas
 // ======================
@@ -132,10 +141,12 @@ watch(paymentStatusFront, status => {
   if (status === 'paid') {
     formData.value.parcelasTotais = 1
     formData.value.parcelasRestantes = 0
+    formData.value.dataPrimeiroVencimento = undefined
   }
   if (status === 'pending') {
     formData.value.parcelasTotais = 1
     formData.value.parcelasRestantes = 1
+    formData.value.dataPrimeiroVencimento = undefined
   }
   if (status === 'installment') {
     if (formData.value.parcelasTotais < 2) formData.value.parcelasTotais = 2
@@ -144,7 +155,7 @@ watch(paymentStatusFront, status => {
 })
 
 watch(() => formData.value.parcelasTotais, val => {
-  if (paymentStatusFront.value !== 'paid') {
+  if (paymentStatusFront.value === 'installment') {
     formData.value.parcelasRestantes = val
   }
 })
@@ -153,80 +164,199 @@ watch(() => formData.value.parcelasTotais, val => {
 // Itens
 // ======================
 const showItemModal = ref(false)
-const addItemFromModal = (item: ItemPedidoDto) => formData.value.itens.push(item)
+const addItemFromModal = (item: ItemPedidoDto) => {
+  formData.value.itens.push({
+    nome: item.nome,
+    quantidade: item.quantidade,
+    preco: item.preco,
+    tamanho: item.tamanho
+  })
+}
 const removeItem = (index: number) => formData.value.itens.splice(index, 1)
 
 // ======================
-// Total
+// Total e parcelas
 // ======================
 const total = computed(() =>
   formData.value.itens.reduce((acc, i) => acc + i.preco * i.quantidade, 0)
 )
-const formatCurrency = (v: number) =>
-  v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
 const valorParcela = computed(() => {
-  if (paymentStatusFront.value !== 'installment' || formData.value.parcelasTotais < 1) return 0
+  if (paymentStatusFront.value !== 'installment') return 0
   return total.value / formData.value.parcelasTotais
 })
 
+const formatCurrency = (v: number) =>
+  v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
+// ======================
+// Normalizar pedido
+// ======================
+const normalizarPedido = (p: any): PedidoBackend => {
+  const parcelas = p.parcelas ?? []
+  return {
+    id: p.id,
+    cliente: p.cliente,
+    itens: p.itens.map((i: any) => ({
+      id: i.id,
+      nomeProduto: i.nomeProduto ?? i.nome,
+      quantidade: i.quantidade,
+      precoUnitario: i.precoUnitario ?? i.preco,
+      tamanho: i.tamanho
+    })),
+    parcelasTotais: p.parcelasTotais ?? parcelas.length,
+    parcelasRestantes: p.parcelasRestantes ?? parcelas.filter((x: any) => x.status !== 'PAGA').length,
+    parcelasPagas: p.parcelasPagas ?? parcelas.filter((x: any) => x.status === 'PAGA').length,
+    parcelas,
+    statusDePagamento: p.statusDePagamento,
+    formaPagamento: ["PIX", "CREDITO", "DEBITO", "DINHEIRO"].includes(p.formaPagamento)
+      ? (p.formaPagamento as "PIX" | "CREDITO" | "DEBITO" | "DINHEIRO")
+      : "CREDITO",
+    dataCriacao: p.dataCriacao,
+    dataPrimeiroVencimento: p.dataPrimeiroVencimento ?? (parcelas[0]?.dataVencimento ?? new Date().toISOString().substring(0, 10)),
+    valorParcelas: p.valorParcelas ?? (parcelas[0]?.valor ?? 0),
+    diaVencimento: p.diaVencimento ?? (parcelas[0] ? new Date(parcelas[0].dataVencimento).getDate() : new Date().getDate()),
+    proximaParcelaVencimento: parcelas.find((x: any) => x.status !== 'PAGA')?.dataVencimento
+  }
+}
+// ======================
+// Função para gerar parcelas
+// ======================
+function gerarParcelas(): Parcela[] {
+  if (!formData.value.dataPrimeiroVencimento) return []
+
+  const parcelas: Parcela[] = []
+  const dia = formData.value.dataPrimeiroVencimento.getDate()
+  const mes = formData.value.dataPrimeiroVencimento.getMonth()
+  const ano = formData.value.dataPrimeiroVencimento.getFullYear()
+  const total = formData.value.parcelasTotais
+  const valor = total > 0 ? total / formData.value.parcelasTotais : 0
+
+  for (let i = 0; i < total; i++) {
+    // Cria data local e mantém o mesmo dia
+    const novaData = new Date(ano, mes + i, dia)
+
+    parcelas.push({
+      numero: i + 1,
+      valor,
+      status: 'ABERTA',
+      // Formato YYYY-MM-DD mas **local**, sem deslocamento UTC
+      dataVencimento: `${novaData.getFullYear()}-${String(novaData.getMonth() + 1).padStart(2, '0')}-${String(novaData.getDate()).padStart(2, '0')}`
+    })
+  }
+
+  return parcelas
+}
+
+// ======================
+// Salvar pedido
+// ======================
+const salvarPedido = async () => {
+  try {
+    if (!formData.value.idCliente) throw new Error('Selecione um cliente')
+    if (formData.value.itens.length === 0) throw new Error('Adicione itens')
+    if (paymentStatusFront.value === 'installment' && !formData.value.dataPrimeiroVencimento)
+      throw new Error('Informe a data de vencimento da primeira parcela')
+
+    formData.value.statusDePagamento =
+      paymentStatusFront.value === 'paid' ? 'PAGO' : 'PENDENTE'
+
+    const baseUrl = import.meta.env.VITE_API_URL
+    const token = localStorage.getItem('token')
+
+    // Gera as parcelas caso seja parcelado
+    const parcelas = paymentStatusFront.value === 'installment' ? gerarParcelas() : []
+
+    const valorParcelasCalculado =
+      paymentStatusFront.value === 'installment'
+        ? parcelas[0]?.valor || 0
+        : total.value
+
+    const payload = {
+      ...formData.value,
+      parcelas,
+      valorParcelas: valorParcelasCalculado,
+      diaVencimento: formData.value.dataPrimeiroVencimento
+        ? formData.value.dataPrimeiroVencimento.getDate()
+        : new Date().getDate(),
+      formaPagamento: formData.value.formaPagamento ?? 'CREDITO'
+    }
+
+    let res
+    if (formData.value.id) {
+      // edição
+      res = await axios.put(`${baseUrl}/pedidos/${formData.value.id}`, payload, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+    } else {
+      // criação
+      res = await axios.post(`${baseUrl}/pedidos`, payload, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+    }
+
+    emit('submit', normalizarPedido(res.data))
+    close()
+
+    // reset do form
+    formData.value = {
+      id: undefined,
+      idCliente: '',
+      itens: [],
+      parcelasTotais: 1,
+      parcelasRestantes: 1,
+      statusDePagamento: 'PENDENTE',
+      formaPagamento: undefined,
+      dataPrimeiroVencimento: undefined
+    }
+    paymentStatusFront.value = 'pending'
+    clienteSelecionadoId.value = ''
+    clienteSearch.value = ''
+  } catch (err: any) {
+    emit('error', err.message || 'Erro ao criar/atualizar pedido')
+  }
+}
+
+const canSubmit = computed(
+  () =>
+    !!formData.value.idCliente &&
+    formData.value.itens.length > 0 &&
+    total.value > 0
+)
+
 const removerClienteSelecionado = () => {
-  console.log('Removendo seleção')
   clienteSelecionadoId.value = ''
   clienteSearch.value = ''
   formData.value.idCliente = ''
 }
 
 // ======================
-// Salvar Pedido
+// Data formatada
 // ======================
-const salvarPedido = async () => {
-  try {
-    const token = localStorage.getItem('token')
-    if (!token) throw new Error('Token ausente')
-    if (!formData.value.idCliente) throw new Error('Selecione um cliente')
-    if (formData.value.itens.length === 0) throw new Error('Adicione itens')
+const dataPrimeiroVencimentoFormatada = computed({
+  get: () => {
+    const valor = formData.value.dataPrimeiroVencimento
+    if (!valor) return ''
 
-    formData.value.statusDePagamento =
-      paymentStatusFront.value === 'paid' ? 'PAGO' : 'PENDENTE'
-
-    const baseUrl = import.meta.env.VITE_API_URL  
-    const res = await axios.post(`${baseUrl}/pedidos`, formData.value, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-
-    const pedidoCriado: PedidoBackend = {
-      id: res.data.id,
-      cliente: clienteSelecionado.value!,
-      itens: formData.value.itens.map(i => ({
-        nomeProduto: i.nome,
-        quantidade: i.quantidade,
-        precoUnitario: i.preco,
-        tamanho: i.tamanho
-      })),
-      parcelasTotais: formData.value.parcelasTotais,
-      parcelasRestantes: formData.value.parcelasRestantes,
-      parcelasPagas: formData.value.parcelasTotais - formData.value.parcelasRestantes,
-      statusDePagamento: formData.value.statusDePagamento,
-      dataCriacao: res.data.dataCriacao
+    let d: Date
+    if (typeof valor === 'string') {
+      // aqui garantimos que é string
+      const [ano, mes, dia] = (valor as string).split('-').map(Number)
+      d = new Date(ano, mes - 1, dia)
+    } else {
+      d = valor
     }
 
-    emit('submit', pedidoCriado)
-    close()
-
-    // RESET
-    formData.value = { idCliente: '', itens: [], parcelasTotais: 1, parcelasRestantes: 1, statusDePagamento: 'PENDENTE' }
-    clienteSelecionadoId.value = ''
-    clienteSearch.value = ''
-    paymentStatusFront.value = 'pending'
-  } catch (err: any) {
-    emit('error', err.message || 'Erro ao criar pedido')
+    return new Intl.DateTimeFormat('pt-BR').format(d)
+  },
+  set: (val: string) => {
+    const [dia, mes, ano] = val.split('/').map(Number)
+    if (dia && mes && ano) formData.value.dataPrimeiroVencimento = new Date(ano, mes - 1, dia)
   }
-}
+})
 
-const canSubmit = computed(
-  () => !!formData.value.idCliente && formData.value.itens.length > 0 && total.value > 0
-)
 </script>
+
 
 <template>
   <div v-if="internalShow" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -248,26 +378,21 @@ const canSubmit = computed(
         <div>
           <h2 class="text-lg font-bold text-slate-900 pb-2">Dados do Cliente</h2>
           <v-combobox
-            v-model="clienteSelecionadoId"
-            v-model:search-input="clienteSearch"
-            :items="clienteItems"
-            item-title="label"
-            item-value="value"
-            label="Selecione o cliente"
-            clearable
-            variant="outlined"
-            hide-details
-            :return-object="false"
-          />
+              v-model="clienteSelecionadoObj"
+              :items="clienteItems"
+              item-title="label"
+              item-value="value"
+              label="Selecione o cliente"
+              clearable
+              variant="outlined"
+              hide-details
+              return-object
+            />
 
-        <p v-if="clienteSelecionado" class="mt-2 text-sm text-slate-600">
-          Cliente selecionado: <span class="font-semibold">{{ clienteSelecionado.nome }}</span>
-          <X 
-            class="inline ml-2 cursor-pointer" 
-            @click="removerClienteSelecionado" 
-          />
-        </p>
-
+          <p v-if="clienteSelecionado" class="mt-2 text-sm text-slate-600">
+            Cliente selecionado: <span class="font-semibold">{{ clienteSelecionado.nome }}</span>
+            <X class="inline ml-2 cursor-pointer" @click="removerClienteSelecionado" />
+          </p>
         </div>
 
         <!-- ITENS -->
@@ -314,7 +439,8 @@ const canSubmit = computed(
 
         <!-- PAGAMENTO -->
         <div class="pt-5 border-t border-slate-200 flex flex-col gap-6">
-          <h2 class="text-lg font-bold text-slate-900 tracking-tight">Detalhes do Pagamento</h2>
+          <h2 class="text-lg font-bold text-slate-900">Detalhes do Pagamento</h2>
+
           <v-select
             v-model="paymentStatusFront"
             label="Status do pagamento"
@@ -324,21 +450,40 @@ const canSubmit = computed(
               { title: 'Parcelado', value: 'installment' }
             ]"
             variant="outlined"
-            density="compact"
           />
-          <div v-if="paymentStatusFront !== 'paid'" class="flex flex-col gap-1">
+
+          <v-select
+            v-if="paymentStatusFront !== 'pending'"
+            v-model="formData.formaPagamento"
+            label="Forma de pagamento"
+            :items="[
+              { title: 'Dinheiro', value: 'DINHEIRO' },
+              { title: 'Crédito', value: 'CREDITO' },
+              { title: 'Débito', value: 'DEBITO' },
+              { title: 'PIX', value: 'PIX' }
+            ]"
+            variant="outlined"
+          />
+
+          <div v-if="paymentStatusFront === 'installment'" class="flex gap-4 items-end">
             <v-text-field
               v-model.number="formData.parcelasTotais"
-              label="Número de parcelas totais"
+              label="Total de parcelas"
               type="number"
-              min="1"
+              min="2"
               variant="outlined"
-              density="comfortable"
-              hide-details
             />
-            <p class="text-sm text-slate-500">
-              O pedido será criado com <span class="font-semibold">{{ formData.parcelasTotais }}</span> parcela(s) restante(s).
-            </p>
+            <v-menu v-model="menu" :close-on-content-click="false" :nudge-width="200" transition="scale-transition" offset-y min-width="auto">
+              <template #activator="{ props: menuProps }">
+                <v-text-field v-model="dataPrimeiroVencimentoFormatada" label="Data da primeira parcela" readonly v-bind="menuProps" variant="outlined" />
+              </template>
+              <v-date-picker
+              v-model="formData.dataPrimeiroVencimento"
+              locale="pt-BR"
+              :min="new Date()"
+              @input="menu = false"
+            />
+            </v-menu>
           </div>
         </div>
       </div>

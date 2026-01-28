@@ -17,6 +17,7 @@ import ModalViewPedido from '@/components/modais/ModalViewPedido.vue'
 import ModalDeletePedido from '@/components/modais/ModalDeletePedido.vue'
 import ModalViewCliente from '@/components/modais/ModalViewCliente.vue'
 
+
 // ======================
 // Tipos
 // ======================
@@ -37,17 +38,29 @@ interface Cliente {
   notas?: string
 }
 
+interface Parcela {
+  numero: number
+  valor: number
+  dataVencimento: string
+  status: 'ABERTA' | 'PAGA' | 'VENCIDA'
+  paga: boolean
+}
+
 interface PedidoBackend {
   id: string
-  cliente: Cliente
+  cliente: { id: string; nome: string; email?: string; telefone?: string }
   itens: ItemPedido[]
   parcelasTotais: number
   parcelasRestantes: number
   parcelasPagas: number
+  parcelas: Parcela[]
   statusDePagamento: 'PAGO' | 'PENDENTE'
+  formaPagamento: 'PIX' | 'CREDITO' | 'DEBITO' | 'DINHEIRO'
   dataCriacao?: string
+  dataPrimeiroVencimento: string
+  valorParcelas: number
+  diaVencimento: number
   proximaParcelaVencimento?: string
-  formaPagamento?: string
 }
 
 // ======================
@@ -71,20 +84,22 @@ const showViewPedidoModal = ref(false)
 const showDeleteModal = ref(false)
 const showViewClienteModal = ref(false)
 
-// Pedido selecionado
+// Selecionados
 const pedidoSelecionado = ref<PedidoBackend | null>(null)
 const pedidoVisualizado = ref<PedidoBackend | null>(null)
 const pedidoDeletar = ref<PedidoBackend | null>(null)
 const clienteVisualizado = ref<Cliente | null>(null)
 
-// Toast
 const toast = useToast()
 
 // ======================
-// Helpers (Datas)
+// Helpers
 // ======================
 const startOfDay = (date: string) => new Date(`${date}T00:00:00`)
 const endOfDay = (date: string) => new Date(`${date}T23:59:59`)
+
+
+
 
 // ======================
 // Backend
@@ -94,15 +109,47 @@ const carregarPedidos = async () => {
   try {
     const token = localStorage.getItem('token')
     const baseURL = import.meta.env.VITE_API_URL
+
     const res = await axios.get(`${baseURL}/pedidos`, {
       headers: { Authorization: `Bearer ${token}` }
     })
 
-    pedidos.value = res.data.map((p: any) => ({
-      ...p,
-      cliente: { ...p.cliente, nome: p.cliente.nome },
-      parcelasPagas: p.parcelasPagas ?? (p.parcelasTotais - (p.parcelasRestantes ?? 0))
-    }))
+    pedidos.value = res.data.map((p: any): PedidoBackend => {
+      const parcelas: Parcela[] = (p.parcelas ?? []).map((parcela: any) => ({
+        numero: parcela.numero,
+        valor: parcela.valor,
+        dataVencimento: parcela.dataVencimento,
+        status: parcela.status,
+        paga: parcela.status === 'PAGA'
+      }))
+
+      const parcelasPagas = parcelas.filter(p => p.status === 'PAGA').length
+
+      return {
+        id: p.id,
+        cliente: p.cliente,
+        itens: p.itens,
+        parcelasTotais: p.parcelasTotais,
+        parcelasPagas,
+        parcelasRestantes: p.parcelasTotais - parcelasPagas,
+        parcelas,
+        statusDePagamento: p.statusDePagamento,
+        formaPagamento: ['PIX', 'CREDITO', 'DEBITO', 'DINHEIRO'].includes(p.formaPagamento)
+          ? p.formaPagamento
+          : 'CREDITO',
+        dataCriacao: p.dataCriacao,
+        dataPrimeiroVencimento:
+          p.dataPrimeiroVencimento ??
+          parcelas[0]?.dataVencimento ??
+          new Date().toISOString().substring(0, 10),
+        valorParcelas: p.valorParcelas ?? parcelas[0]?.valor ?? 0,
+        diaVencimento:
+          p.diaVencimento ??
+          (parcelas[0]
+            ? new Date(parcelas[0].dataVencimento).getDate()
+            : new Date().getDate())
+      }
+    })
   } catch (err) {
     console.error(err)
     toast.error('Erro ao carregar pedidos')
@@ -113,6 +160,9 @@ const carregarPedidos = async () => {
 
 onMounted(carregarPedidos)
 
+// ======================
+// Computeds
+// ======================
 // ======================
 // Computeds: pesquisa + filtros
 // ======================
@@ -151,6 +201,8 @@ const pedidosFiltrados = computed(() => {
   return resultado
 })
 
+
+
 // ======================
 // Filtros / Modais
 // ======================
@@ -171,40 +223,46 @@ const limparFiltros = () => {
   orderFilter.value = 'RECENTE'
   toast.success('Filtros limpos!')
 }
-
 // ======================
-// CRUD local + DELETE backend
+// CRUD LOCAL
 // ======================
 const adicionarPedidoNaTabela = (pedido: PedidoBackend) => {
-  pedidos.value = [pedido, ...pedidos.value]
+  pedidos.value.unshift(pedido)
   toast.success('Pedido criado com sucesso!')
 }
 
 const atualizarPedidoNaTabela = (pedidoAtualizado: PedidoBackend) => {
-  const index = pedidos.value.findIndex(p => p.id === pedidoAtualizado.id)
-  if (index !== -1) pedidos.value.splice(index, 1, pedidoAtualizado)
-  toast.success('Pedido atualizado!')
-}
+  const parcelasPagas = pedidoAtualizado.parcelas.filter(
+    p => p.status === 'PAGA'
+  ).length
 
-const deletarPedido = async (id: string) => {
-  try {
-    const token = localStorage.getItem('token')
-    if (!token) {
-      toast.error('Usuário não autenticado')
-      return
-    }
-    const baseURL = import.meta.env.VITE_API_URL
-    await axios.delete(`${baseURL}/${id}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-    pedidos.value = pedidos.value.filter(p => p.id !== id)
-    toast.success('Pedido deletado com sucesso!')
-  } catch (err: any) {
-    console.error(err)
-    toast.error(`Erro ao deletar pedido: ${err.response?.status || err.message}`)
+  const pedidoNormalizado: PedidoBackend = {
+    ...pedidoAtualizado,
+    parcelasPagas,
+    parcelasRestantes: pedidoAtualizado.parcelasTotais - parcelasPagas,
+    parcelas: pedidoAtualizado.parcelas.map(p => ({
+      ...p,
+      paga: p.status === 'PAGA'
+    }))
   }
+
+  const index = pedidos.value.findIndex(p => p.id === pedidoNormalizado.id)
+  if (index !== -1) {
+    pedidos.value.splice(index, 1, pedidoNormalizado) // 🔥 reatividade correta
+  }
+  toast.success('Pedido ATUALIZADO com sucesso!')
 }
 
+
+const deletarPedidoLocal = (id: string) => {
+  pedidos.value = pedidos.value.filter(p => p.id !== id)
+  toast.success('Pedido deletado com sucesso!')
+}
+
+const handleToast = (payload: { message: string; type: 'success' | 'error' }) => {
+  console.log('Toast recebido:', payload) // 🟢 teste
+  toast[payload.type](payload.message)
+}
 
 </script>
 
@@ -214,36 +272,72 @@ const deletarPedido = async (id: string) => {
     <main class="flex-1 ml-64 px-4 py-8 md:px-8">
       <div class="mx-auto max-w-7xl flex flex-col gap-6">
 
-        <!-- Cabeçalho -->
-        <HeaderPage 
+      
+        <HeaderPage
           title="Gerenciamento de Pedidos"
           subtitle="Adicione, edite e visualize informações dos pedidos"
         >
           <template #actions>
-            <button
-              @click="showNewModal = true"
-              class="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white font-bold hover:bg-primary/90 hover:scale-105"
-            >
-              <Plus class="w-4 h-4" />
-              Novo Pedido
-            </button>
+           <button
+            class="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-white font-bold hover:bg-primary/90"
+            @click="showNewModal = true"
+          >
+            <Plus class="w-5 h-5" />
+            Novo Pedido
+          </button>
+
           </template>
         </HeaderPage>
 
-        <!-- Busca + filtros -->
-        <SearchInput v-model="searchQuery" @openFilter="abrirFiltros" />
+        <SearchInput 
+        v-model="searchQuery" 
+        placeholder="Buscar por nome, e-mail, telefone ou notas..."
+        filterType="pedido"
+        @openFilter="showFiltersModal = true" 
+      />
 
-        <!-- Tabela de pedidos -->
+
         <TablePedidos
           :pedidos="pedidosFiltrados"
           :loading="loading"
-          @edit="pedidoSelecionado = $event; showEditModal = true"
+          @updated="atualizarPedidoNaTabela"
+          @deleted="deletarPedidoLocal"
           @view="pedidoVisualizado = $event; showViewPedidoModal = true"
-          @delete="pedidoDeletar = $event; showDeleteModal = true"
+          @edit="pedidoSelecionado = $event; showEditModal = true"
         />
 
         <!-- Modais -->
-        <ModalFilters
+        <ModalNewPedido
+          v-model="showNewModal"
+          @submit="adicionarPedidoNaTabela"
+          @toast="handleToast"
+        />
+
+        <ModalEditPedido
+          v-model="showEditModal"
+          :pedido="pedidoSelecionado"
+          @submit="atualizarPedidoNaTabela"
+          @toast="handleToast"
+        />
+
+        <ModalViewPedido
+          v-model="showViewPedidoModal"
+          :pedido="pedidoVisualizado"
+        />
+
+        <ModalDeletePedido
+          v-model="showDeleteModal"
+          :pedido="pedidoDeletar"
+          @deleted="deletarPedidoLocal"
+          @toast="handleToast"
+        />
+
+        <ModalViewCliente
+          v-model="showViewClienteModal"
+          :cliente="clienteVisualizado"
+        />
+
+          <ModalFilters
           v-model="showFiltersModal"
           :currentFilters="{
             status: statusFilter,
@@ -255,17 +349,9 @@ const deletarPedido = async (id: string) => {
           @clearFilters="limparFiltros"
           @error="msg => toast.error(msg)"
         />
-
-        <ModalNewPedido v-model="showNewModal" @submit="adicionarPedidoNaTabela"/>
-        <ModalEditPedido v-model="showEditModal" :pedido="pedidoSelecionado" @submit="atualizarPedidoNaTabela"/>
-        <ModalViewPedido v-model="showViewPedidoModal" :pedido="pedidoVisualizado" />
-        <ModalDeletePedido 
-          v-model="showDeleteModal" 
-          :pedido="pedidoDeletar" 
-          @deleted="deletarPedido"
-        />
-        <ModalViewCliente v-model="showViewClienteModal" :cliente="clienteVisualizado"/>
+        
       </div>
     </main>
   </div>
 </template>
+

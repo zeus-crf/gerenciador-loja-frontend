@@ -12,11 +12,16 @@ import 'vuetify/styles'
 import { createVuetify } from 'vuetify'
 import * as components from 'vuetify/components'
 import * as directives from 'vuetify/directives'
+import { pt } from 'vuetify/locale' 
 
-// Cria o Vuetify
+// Cria o Vuetify com locale pt-BR
 const vuetify = createVuetify({
   components,
   directives,
+  locale: {
+    locale: 'pt',        // define o idioma padrão
+    messages: { pt },    // importa as traduções
+  },
   theme: {
     defaultTheme: 'light',
     themes: {
@@ -30,7 +35,6 @@ const vuetify = createVuetify({
     },
   },
 })
-
 
 const app = createApp(App)
 
